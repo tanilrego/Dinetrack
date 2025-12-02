@@ -48,7 +48,7 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
       case 'operator':
         return OperatorHomeScreen();
       case 'kitchen':
-        return KitchenHomeScreen();
+        return KitchenStaffScreen();
       case 'supervisor':
         return SupervisorHomeScreen();
       default:

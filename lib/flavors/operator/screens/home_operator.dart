@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../../../core/services/supabase_service.dart';
+import 'package:dinetrack/core/services/supabase_service.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:dinetrack/flavors/operator/screens/qr_code_generator.dart';
+import 'dart:math';
 
 class OperatorHomeScreen extends StatefulWidget {
   const OperatorHomeScreen({super.key});
@@ -10,7 +13,8 @@ class OperatorHomeScreen extends StatefulWidget {
 
 class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
   final supabase = SupabaseService().client;
-
+  final SupabaseService _supabaseService = SupabaseService();
+  String _currentEstablishmentId = '';
   // Dashboard data
   double totalSales = 0;
   int totalOrders = 0;
@@ -28,16 +32,39 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     super.initState();
     _loadDashboardData();
   }
-
   Future<void> _loadDashboardData() async {
     setState(() => isLoading = true);
 
     try {
+      // Get current operator's establishment ID
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        final operatorData = await supabase
+            .from('operators')
+            .select('establishment_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        if (operatorData != null) {
+          // Ensure it's a string and not null
+          final establishmentId = operatorData['establishment_id'];
+          if (establishmentId != null) {
+            _currentEstablishmentId = establishmentId.toString();
+            print('Establishment ID loaded: $_currentEstablishmentId'); // Debug
+          }
+        }
+      }
+      if (_currentEstablishmentId.isEmpty) {
+        print('Warning: Establishment ID is empty!');
+        return;
+      }
+
       // Load sales data for today
       final salesData = await supabase
           .from('orders')
           .select('total_amount')
-          .gte('created_at', DateTime.now().toIso8601String().split('T')[0]);
+          .gte('created_at', DateTime.now().toIso8601String().split('T')[0])
+          .eq('establishment_id', _currentEstablishmentId);
 
       totalSales = (salesData as List).fold(
           0.0,
@@ -45,11 +72,12 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       );
       totalOrders = (salesData as List).length;
 
-      // Load active tables
+      // Load active tables - from 'tables' table
       final tablesData = await supabase
           .from('tables')
           .select('id')
-          .eq('status', 'occupied');
+          .eq('is_available', false)
+          .eq('establishment_id', _currentEstablishmentId);
 
       activeTables = (tablesData as List).length;
 
@@ -57,14 +85,16 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       final staffData = await supabase
           .from('staff')
           .select('name, email, role')
-          .eq('is_active', true);
+          .eq('is_active', true)
+          .eq('establishment_id', _currentEstablishmentId);
 
       staffList = List<Map<String, dynamic>>.from(staffData as List);
 
-      // Load QR codes data
+      // Load QR codes data from 'tables' table
       final qrData = await supabase
-          .from('table_qr_codes')
-          .select('table_number, qr_code_url, created_at')
+          .from('tables')
+          .select('id, label, table_number, qr_code, qr_code_data, capacity, is_available, created_at')
+          .eq('establishment_id', _currentEstablishmentId)
           .order('table_number');
 
       qrCodesList = List<Map<String, dynamic>>.from(qrData as List);
@@ -75,6 +105,20 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     }
   }
 
+  Future<void> _signOut() async {
+    try {
+      await _supabaseService.client.auth.signOut();
+      // Navigate to login screen or handle sign out
+      // You might want to use Navigator.pushReplacementNamed(context, '/login');
+    } catch (e) {
+      debugPrint('Error signing out: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error signing out: $e')),
+        );
+      }
+    }
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -108,7 +152,19 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       case 2:
         return _buildOrdersView();
       case 3:
-        return _buildQRCodesView();
+        return QRCodeGeneratorPage(
+          establishmentId: _currentEstablishmentId,
+          isDarkMode: isDarkMode,
+          onBackToDashboard: () {
+            setState(() {
+              selectedMenuIndex = 0; // Go back to dashboard
+            });
+          },
+          onQRCodeGenerated: () {
+            // Refresh dashboard data when QR code is generated
+            _loadDashboardData();
+          },
+        );
       case 4:
         return _buildInventoryView();
       case 5:
@@ -145,7 +201,10 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     );
   }
 
-  Widget _buildQRCodesView() {
+
+
+
+  /*Widget _buildQRCodesView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -186,9 +245,9 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
         ],
       ),
     );
-  }
+  }*/
 
-  Widget _buildEmptyQRCodesState() {
+  /*Widget _buildEmptyQRCodesState() {
     return Container(
       padding: const EdgeInsets.all(48),
       decoration: BoxDecoration(
@@ -253,70 +312,8 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
         ),
       ),
     );
-  }
+  }*/
 
-  Widget _buildQRCodesGrid() {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 5,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: 0.8,
-      ),
-      itemCount: qrCodesList.length,
-      itemBuilder: (context, index) {
-        final qrCode = qrCodesList[index];
-        return _buildQRCodeCard(qrCode);
-      },
-    );
-  }
-
-  Widget _buildQRCodeCard(Map<String, dynamic> qrCode) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 120,
-            height: 120,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.qr_code_2, size: 80, color: Colors.black),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Table NO.',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          Text(
-            '${qrCode['table_number']}',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // Placeholder views for other menu items
   Widget _buildMenuView() {
@@ -386,7 +383,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           _buildSidebarIcon(Icons.inventory_2_outlined, 4),
           _buildSidebarIcon(Icons.people, 5),
           const Spacer(),
-          _buildSidebarIcon(Icons.settings, 6),
+          _buildSidebarIcon(Icons.logout,6),
           const SizedBox(height: 24),
         ],
       ),
@@ -496,11 +493,14 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
-                const CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, size: 20, color: Colors.white),
-                ),
+    // Logout button
+    ElevatedButton(
+    onPressed: _signOut,
+    style: ElevatedButton.styleFrom(
+    backgroundColor: Colors.grey,
+    ),
+      child: Icon(Icons.logout, color: Colors.white),
+    ),
               ],
             ),
           ),
@@ -509,20 +509,6 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'Joy Crith',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.white : Colors.black,
-                ),
-              ),
-              Text(
-                '(Manager)',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
-              ),
             ],
           ),
           const SizedBox(width: 8),
