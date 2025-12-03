@@ -1,8 +1,7 @@
+//lib/flavors/operator/screens/home_operator.dart
 import 'package:flutter/material.dart';
 import 'package:dinetrack/core/services/supabase_service.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:dinetrack/flavors/operator/screens/qr_code_generator.dart';
-import 'dart:math';
+import 'qr_code_generator.dart';
 
 class OperatorHomeScreen extends StatefulWidget {
   const OperatorHomeScreen({super.key});
@@ -32,6 +31,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     super.initState();
     _loadDashboardData();
   }
+
   Future<void> _loadDashboardData() async {
     setState(() => isLoading = true);
 
@@ -68,8 +68,8 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
 
       totalSales = (salesData as List).fold(
           0.0,
-              (sum, order) => sum + ((order['total_amount'] ?? 0) as num).toDouble()
-      );
+              (sum, order) => sum + ((order['total_amount'] ?? 0) as num).toDouble());
+
       totalOrders = (salesData as List).length;
 
       // Load active tables - from 'tables' table
@@ -119,6 +119,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -152,7 +153,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       case 2:
         return _buildOrdersView();
       case 3:
-        return QRCodeGeneratorPage(
+        return QrCodeGeneratorScreen(
           establishmentId: _currentEstablishmentId,
           isDarkMode: isDarkMode,
           onBackToDashboard: () {
@@ -200,120 +201,6 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       ),
     );
   }
-
-
-
-
-  /*Widget _buildQRCodesView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Text(
-              'DINETRACK',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                'Tables',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.black : Colors.black,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          qrCodesList.isEmpty
-              ? _buildEmptyQRCodesState()
-              : _buildQRCodesGrid(),
-        ],
-      ),
-    );
-  }*/
-
-  /*Widget _buildEmptyQRCodesState() {
-    return Container(
-      padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.qr_code_2,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No QR Codes Generated Yet',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create QR codes for your tables to get started',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                // TODO: Add QR code generation functionality
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('QR Code generation coming soon!'),
-                  ),
-                );
-              },
-              icon: const Icon(Icons.add),
-              label: const Text('Generate QR Codes'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }*/
-
 
   // Placeholder views for other menu items
   Widget _buildMenuView() {
@@ -383,7 +270,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           _buildSidebarIcon(Icons.inventory_2_outlined, 4),
           _buildSidebarIcon(Icons.people, 5),
           const Spacer(),
-          _buildSidebarIcon(Icons.logout,6),
+          _buildSidebarIcon(Icons.settings, 6),
           const SizedBox(height: 24),
         ],
       ),
@@ -405,6 +292,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) => const Icon(Icons.restaurant),
           ),
         ),
       ),
@@ -425,7 +313,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-            color: isActive ? Colors.white.withOpacity(0.2) : Colors.transparent,
+            color: isActive ? Colors.white.withValues(alpha:0.2) : Colors.transparent,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -445,7 +333,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
         color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -493,14 +381,14 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
-    // Logout button
-    ElevatedButton(
-    onPressed: _signOut,
-    style: ElevatedButton.styleFrom(
-    backgroundColor: Colors.grey,
-    ),
-      child: Icon(Icons.logout, color: Colors.white),
-    ),
+                // Logout button
+                ElevatedButton(
+                  onPressed: _signOut,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey,
+                  ),
+                  child: const Icon(Icons.logout, color: Colors.white),
+                ),
               ],
             ),
           ),
@@ -509,6 +397,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // Add any additional user info here if needed
             ],
           ),
           const SizedBox(width: 8),
@@ -564,7 +453,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -576,7 +465,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           Text(
             title,
             style: TextStyle(
-              color: textColor.withOpacity(0.8),
+              color: textColor.withValues(alpha:0.8),
               fontSize: 14,
             ),
           ),
@@ -618,7 +507,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha:0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -684,7 +573,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
                 decoration: BoxDecoration(
                   color: index % 2 == 0
                       ? Colors.white
-                      : Colors.blue.shade50.withOpacity(0.3),
+                      : Colors.blue.shade50.withValues(alpha:0.3),
                 ),
                 child: Row(
                   children: [

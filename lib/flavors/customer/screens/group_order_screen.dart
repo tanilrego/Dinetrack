@@ -475,7 +475,7 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
                     children: _participants.entries.map((entry) {
                       return Chip(
                         label: Text(entry.value),
-                        backgroundColor: const Color(0xFF53B175).withOpacity(0.1),
+                        backgroundColor: const Color(0xFF53B175).withValues(alpha: 0.1),
                       );
                     }).toList(),
                   ),

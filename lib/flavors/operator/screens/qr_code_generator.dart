@@ -1,733 +1,702 @@
+// lib/flavors/operator/screens/qr_code_generator.dart
+import 'dart:convert';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/rendering.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:qr_flutter/qr_flutter.dart';
-import 'dart:math';
+import 'package:share_plus/share_plus.dart';
+import '../../../../core/services/supabase_service.dart';
+import 'dart:io';
 
-class QRCodeGeneratorPage extends StatefulWidget {
+class QrCodeGeneratorScreen extends StatefulWidget {
   final String establishmentId;
   final bool isDarkMode;
   final VoidCallback? onBackToDashboard;
   final VoidCallback? onQRCodeGenerated;
 
-  const QRCodeGeneratorPage({
+  const QrCodeGeneratorScreen({
     Key? key,
     required this.establishmentId,
-    required this.isDarkMode,
+    this.isDarkMode = false,
     this.onBackToDashboard,
     this.onQRCodeGenerated,
   }) : super(key: key);
 
   @override
-  _QRCodeGeneratorPageState createState() => _QRCodeGeneratorPageState();
+  _QrCodeGeneratorScreenState createState() => _QrCodeGeneratorScreenState();
 }
 
-class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _tableLabelController = TextEditingController();
-  final _capacityController = TextEditingController();
-
-  int _tableNumber = 1;
-  bool _isLoading = false;
-  List<Map<String, dynamic>> _generatedQRCodes = [];
-  final SupabaseClient _supabase = Supabase.instance.client;
+class _QrCodeGeneratorScreenState extends State<QrCodeGeneratorScreen> {
+  final SupabaseService _supabaseService = SupabaseService();
+  List<Map<String, dynamic>> _tables = [];
+  Map<String, dynamic>? _selectedTable;
+  Map<String, dynamic>? _selectedEstablishment;
+  bool _isLoading = true;
+  bool _generatingQr = false;
+  String? _generatedQrData;
+  final GlobalKey _qrKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _loadNextTableNumber();
-    _loadExistingQRCodes();
+    _loadEstablishmentAndTables();
   }
 
-  @override
-  void dispose() {
-    _tableLabelController.dispose();
-    _capacityController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadNextTableNumber() async {
+  Future<void> _loadEstablishmentAndTables() async {
     try {
-      final response = await _supabase
-          .from('tables')
-          .select('table_number')
-          .eq('establishment_id', widget.establishmentId)
-          .order('table_number', ascending: true);
+      final user = _supabaseService.client.auth.currentUser;
+      if (user != null) {
+        final establishments = await _supabaseService.client
+            .from('establishments')
+            .select()
+            .eq('id', widget.establishmentId)
+            .eq('is_active', true);
 
-      if (response.isNotEmpty) {
-        final maxNumber = (response.last['table_number'] as int);
-        setState(() {
-          _tableNumber = maxNumber + 1;
-        });
+        if (establishments.isNotEmpty && establishments[0] != null) {
+          _selectedEstablishment = establishments.first as Map<String, dynamic>;
+
+          final tables = await _supabaseService.client
+              .from('tables')
+              .select()
+              .eq('establishment_id', widget.establishmentId)
+              .order('table_number');
+
+          setState(() {
+            _tables = List<Map<String, dynamic>>.from(tables);
+            _isLoading = false;
+          });
+        } else {
+          final operatorEstablishments = await _supabaseService.client
+              .from('establishments')
+              .select()
+              .eq('owner_id', user.id)
+              .eq('is_active', true);
+
+          if (operatorEstablishments.isNotEmpty && operatorEstablishments[0] != null) {
+            _selectedEstablishment = operatorEstablishments.first as Map<String, dynamic>;
+
+            final establishmentId = _selectedEstablishment?['id'];
+            if (establishmentId != null) {
+              final tables = await _supabaseService.client
+                  .from('tables')
+                  .select()
+                  .eq('establishment_id', establishmentId)
+                  .order('table_number');
+
+              setState(() {
+                _tables = List<Map<String, dynamic>>.from(tables);
+                _isLoading = false;
+              });
+            } else {
+              _setEmptyState();
+            }
+          } else {
+            _setEmptyState();
+          }
+        }
+      } else {
+        _setEmptyState();
       }
-    } catch (error) {
-      print('Error loading table number: $error');
+    } catch (e) {
+      print('Error loading data: $e');
+      _setEmptyState();
     }
   }
 
-  Future<void> _loadExistingQRCodes() async {
-    if (widget.establishmentId.isEmpty) {
-      print('Cannot load QR codes: establishmentId is empty');
-      return;
-    }
-
-    try {
-      final response = await _supabase
-          .from('tables')
-          .select('*')
-          .eq('establishment_id', widget.establishmentId)
-          .order('created_at', ascending: false);
-
-      setState(() {
-        _generatedQRCodes = List<Map<String, dynamic>>.from(response);
-      });
-    } on PostgrestException catch (e) {
-      print('Error loading QR codes (Postgrest): ${e.message}');
-      _showErrorDialog('Failed to load existing QR codes: ${e.message}');
-    } catch (error) {
-      print('Error loading QR codes: $error');
-    }
+  void _setEmptyState() {
+    setState(() {
+      _selectedEstablishment = null;
+      _tables = [];
+      _isLoading = false;
+    });
   }
 
-  String _generateUniqueQRCode() {
-    final random = Random();
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final uniqueCode = List.generate(8, (index) =>
-    chars[random.nextInt(chars.length)]).join();
-
-    return 'table-${_tableNumber}-$uniqueCode';
-  }
-
-  String _generateQRCodeData(String qrCodeId) {
-    // Update this to include establishment ID for better tracking
-    return 'https://your-app-domain.com/menu?table=$qrCodeId&establishment=${widget.establishmentId}';
-  }
-
-  Future<void> _generateQRCode() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    // Validate establishment ID
-    if (widget.establishmentId.isEmpty) {
-      _showErrorDialog('Establishment ID is missing. Please try again.');
-      return;
-    }
-
-    // Check if establishment ID looks like a UUID
-    final uuidRegex = RegExp(
-      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-      caseSensitive: false,
-    );
-
-    if (!uuidRegex.hasMatch(widget.establishmentId)) {
-      _showErrorDialog('Invalid establishment ID format. Please contact support.');
-      print('Invalid establishment ID format: ${widget.establishmentId}');
+  Future<void> _generateAndSaveQrCode() async {
+    if (_selectedTable == null || _selectedEstablishment == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a table first'),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
     setState(() {
-      _isLoading = true;
+      _generatingQr = true;
     });
 
     try {
-      final qrCodeId = _generateUniqueQRCode();
-      final qrCodeData = _generateQRCodeData(qrCodeId);
+      final establishmentId = _selectedEstablishment?['id'];
+      final tableId = _selectedTable?['id'];
+      final tableNumber = _selectedTable?['table_number'];
+      final establishmentName = _selectedEstablishment?['name'];
 
-      // Insert into Supabase
-      final response = await _supabase
-          .from('tables')
-          .insert({
-        'establishment_id': widget.establishmentId,
-        'label': _tableLabelController.text.trim(),
-        'table_number': _tableNumber,
-        'qr_code': qrCodeId,
-        'qr_code_data': qrCodeData,
-        'capacity': int.tryParse(_capacityController.text) ?? 4,
-        'is_available': true,
-      })
-          .select();
-
-      if (response.isNotEmpty) {
-        // Add to local list
-        setState(() {
-          _generatedQRCodes.insert(0, response[0]);
-        });
-
-        // Reset form
-        _tableLabelController.clear();
-        _capacityController.clear();
-
-        // Increment table number for next
-        setState(() {
-          _tableNumber++;
-        });
-
-        // Call refresh callback if provided
-        if (widget.onQRCodeGenerated != null) {
-          widget.onQRCodeGenerated!();
-        }
-
-        // Show success message
-        _showSuccessDialog(qrCodeId); // Now using the function!
+      if (establishmentId == null || tableId == null) {
+        throw Exception('Missing required data');
       }
-    } on PostgrestException catch (e) {
-      // Handle Supabase-specific errors
-      print('PostgrestException: ${e.message}');
-      print('Details: ${e.details}');
-      print('Hint: ${e.hint}');
-      _showErrorDialog('Database error: ${e.message}');
-    } catch (error) {
-      _showErrorDialog('Failed to generate QR code: $error');
-    } finally {
+
+      final qrData = {
+        'establishmentId': establishmentId,
+        'tableId': tableId,
+        'tableNumber': tableNumber,
+        'establishmentName': establishmentName,
+      };
+
+      final jsonString = jsonEncode(qrData);
+      final encodedData = base64Encode(utf8.encode(jsonString));
+
+      await _supabaseService.client
+          .from('tables')
+          .update({
+        'qr_code': encodedData,
+        'qr_code_data': jsonString,
+        'updated_at': DateTime.now().toIso8601String(),
+      })
+          .eq('id', tableId);
+
       setState(() {
-        _isLoading = false;
+        _generatedQrData = encodedData;
+        _generatingQr = false;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('QR Code generated and saved successfully!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      widget.onQRCodeGenerated?.call();
+    } catch (e) {
+      print('Error generating QR code: $e');
+      setState(() {
+        _generatingQr = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  void _showSuccessDialog(String qrCodeId) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('QR Code Generated'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('QR code has been generated successfully!'),
-            const SizedBox(height: 10),
-            Text(
-              'QR Code ID: $qrCodeId',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              'Table #${_tableNumber - 1}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
+  Future<void> _saveAsImage() async {
+    if (_generatedQrData == null || _selectedTable == null) return;
+
+    try {
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Storage permission required'),
+            backgroundColor: Colors.red,
           ),
-        ],
-      ),
-    );
+        );
+        return;
+      }
+
+      final boundary = _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final buffer = byteData?.buffer.asUint8List();
+
+      if (buffer != null) {
+        final time = DateTime.now().millisecondsSinceEpoch;
+        final tableNumber = _selectedTable?['table_number'] ?? 'unknown';
+        final name = 'qr_table_${tableNumber}_$time.png';
+
+        final result = await ImageGallerySaver.saveImage(buffer, name: name);
+
+        if (result['isSuccess'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('QR Code saved to gallery!'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error saving image: $e');
+    }
   }
 
-  void _showErrorDialog(String message) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Error'),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
+  Future<void> _generateAndSharePdf() async {
+    if (_generatedQrData == null || _selectedTable == null || _selectedEstablishment == null) return;
 
-  Future<void> _downloadQRCode(Map<String, dynamic> qrCode) async {
-    // Implement QR code download/saving functionality
-    // You can use packages like image_gallery_saver or share_plus
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Download functionality coming soon!'),
-      ),
-    );
-  }
+    try {
+      final pdf = pw.Document();
 
-  Widget _buildQRCodeCard(Map<String, dynamic> qrCode, bool isDarkMode) {
-    return GestureDetector(
-      onTap: () => _showQRCodeDetails(qrCode, isDarkMode),
-      child: Container(
-        decoration: BoxDecoration(
-          color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 120,
-              height: 120,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: QrImageView(
-                data: qrCode['qr_code_data'] ?? '',
-                version: QrVersions.auto,
-                size: 104,
-                backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-                foregroundColor: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              qrCode['label'] ?? 'Table',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-            Text(
-              'Table #${qrCode['table_number']}',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
-              ),
-            ),
-            Text(
-              'Capacity: ${qrCode['capacity'] ?? 0}',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade500,
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: (qrCode['is_available'] ?? false)
-                    ? Colors.green.shade100
-                    : Colors.red.shade100,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                (qrCode['is_available'] ?? false) ? 'Available' : 'Occupied',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: (qrCode['is_available'] ?? false)
-                      ? Colors.green.shade800
-                      : Colors.red.shade800,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+      final establishmentName = _selectedEstablishment?['name'] ?? 'Unknown Establishment';
+      final tableNumber = _selectedTable?['table_number']?.toString() ?? 'Unknown';
+      final tableLabel = _selectedTable?['label']?.toString() ?? '';
+      final capacity = _selectedTable?['capacity']?.toString() ?? '0';
+      final establishmentType = _selectedEstablishment?['type']?.toString() ?? '';
+      final establishmentAddress = _selectedEstablishment?['address']?.toString() ?? '';
 
-  void _showQRCodeDetails(Map<String, dynamic> qrCode, bool isDarkMode) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-        title: Text(
-          'QR Code Details',
-          style: TextStyle(
-            color: isDarkMode ? Colors.white : Colors.black,
-          ),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Center(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: QrImageView(
-                    data: qrCode['qr_code_data'] ?? '',
-                    version: QrVersions.auto,
-                    size: 150,
-                    backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-                    foregroundColor: isDarkMode ? Colors.white : Colors.black,
+      // Add QR Code page
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          build: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Text(
+                  'Table QR Code',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              _buildDetailRow('Table Label:', qrCode['label'] ?? '', isDarkMode),
-              _buildDetailRow('Table Number:', '${qrCode['table_number']}', isDarkMode),
-              _buildDetailRow('QR Code ID:', qrCode['qr_code'] ?? '', isDarkMode),
-              _buildDetailRow('Capacity:', '${qrCode['capacity']}', isDarkMode),
-              _buildDetailRow('Status:',
-                  (qrCode['is_available'] ?? false) ? 'Available' : 'Occupied', isDarkMode),
-              const SizedBox(height: 8),
-              Text(
-                'Scan this QR code to access the menu',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                  fontStyle: FontStyle.italic,
+                pw.SizedBox(height: 20),
+                pw.Text('Establishment: $establishmentName'),
+                if (establishmentType.isNotEmpty) pw.Text('Type: $establishmentType'),
+                if (establishmentAddress.isNotEmpty) pw.Text('Address: $establishmentAddress'),
+                pw.Text('Table Number: $tableNumber'),
+                if (tableLabel.isNotEmpty) pw.Text('Table Label: $tableLabel'),
+                pw.Text('Capacity: $capacity people'),
+                pw.SizedBox(height: 20),
+                pw.Text('Scan this QR code to order:'),
+                pw.SizedBox(height: 20),
+                pw.Center(
+                  child: pw.Text(
+                    'QR Code Image Placeholder',
+                    style: pw.TextStyle(fontSize: 16),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                pw.SizedBox(height: 20),
+                pw.Text(
+                  'Instructions:',
+                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                ),
+                pw.Text('1. Open DineConnect app'),
+                pw.Text('2. Tap "Scan QR"'),
+                pw.Text('3. Point camera at this code'),
+                pw.Text('4. Start ordering!'),
+              ],
+            );
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Close'),
-          ),
-          ElevatedButton(
-            onPressed: () => _downloadQRCode(qrCode),
-            child: const Text('Download'),
-          ),
-        ],
-      ),
-    );
+      );
+
+      final output = await getTemporaryDirectory();
+      final file = File('${output.path}/table_${tableNumber}_qr.pdf');
+      await file.writeAsBytes(await pdf.save());
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'QR Code for Table $tableNumber - $establishmentName',
+      );
+    } catch (e) {
+      print('Error generating PDF: $e');
+    }
   }
 
-  Widget _buildDetailRow(String label, String value, bool isDarkMode) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Future<void> _shareQrCode() async {
+    if (_generatedQrData == null || _selectedTable == null || _selectedEstablishment == null) return;
 
-  Widget _buildEmptyQRCodesState(bool isDarkMode) {
-    return Container(
-      padding: const EdgeInsets.all(48),
-      decoration: BoxDecoration(
-        color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.qr_code_2,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No QR Codes Generated Yet',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Create QR codes for your tables to get started',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: _generateQRCode,
-              icon: const Icon(Icons.add),
-              label: const Text('Generate First QR Code'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF2563EB),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    try {
+      final boundary = _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return;
+
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final buffer = byteData?.buffer.asUint8List();
+
+      if (buffer != null) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/qr_code.png');
+        await file.writeAsBytes(buffer);
+
+        final tableNumber = _selectedTable?['table_number']?.toString() ?? 'Unknown';
+        final establishmentName = _selectedEstablishment?['name'] ?? 'Unknown Establishment';
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Scan this QR code for Table $tableNumber at $establishmentName',
+        );
+      }
+    } catch (e) {
+      print('Error sharing QR: $e');
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = widget.isDarkMode;
-
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+      appBar: AppBar(
+        title: const Text('Generate Table QR Codes'),
+        leading: widget.onBackToDashboard != null
+            ? IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBackToDashboard,
+        )
+            : null,
+        backgroundColor: widget.isDarkMode ? Colors.grey[900] : null,
+        actions: [
+          if (_generatedQrData != null)
+            IconButton(
+              icon: const Icon(Icons.share),
+              onPressed: _shareQrCode,
+              tooltip: 'Share QR Code',
+            ),
+        ],
+      ),
+      backgroundColor: widget.isDarkMode ? const Color(0xFF1A1A1A) : Colors.white,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _selectedEstablishment == null
+          ? Center(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Header with back button if needed
-            Row(
-              children: [
-                if (widget.onBackToDashboard != null)
-                  IconButton(
-                    icon: Icon(
-                      Icons.arrow_back,
-                      color: isDarkMode ? Colors.white : Colors.black,
-                    ),
-                    onPressed: widget.onBackToDashboard,
-                  ),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      'DINETRACK',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-                if (widget.onBackToDashboard != null)
-                  const SizedBox(width: 48), // For spacing
-              ],
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
             ),
-            const SizedBox(height: 32),
-
-            // Title
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Text(
-                  'QR Code Generator',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: isDarkMode ? Colors.black : Colors.black,
-                  ),
-                ),
+            const SizedBox(height: 20),
+            Text(
+              'No establishment found',
+              style: TextStyle(
+                fontSize: 18,
+                color: widget.isDarkMode ? Colors.white : Colors.black,
               ),
             ),
-            const SizedBox(height: 24),
-
-            // Generation Form
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _loadEstablishmentAndTables,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF53B175),
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      )
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
             Card(
-              color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-              elevation: 2,
+              color: widget.isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
               child: Padding(
                 padding: const EdgeInsets.all(16),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedEstablishment?['name']?.toString() ?? 'No Name',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: widget.isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Type: ${_selectedEstablishment?['type']?.toString() ?? 'Not specified'}',
+                      style: TextStyle(
+                        color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    if (_selectedEstablishment?['address'] != null)
                       Text(
-                        'Generate New QR Code',
+                        'Address: ${_selectedEstablishment?['address']?.toString() ?? ''}',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isDarkMode ? Colors.white : Colors.black,
+                          color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
                         ),
                       ),
-                      const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ),
 
-                      // Table Label
-                      TextFormField(
-                        controller: _tableLabelController,
-                        style: TextStyle(
-                          color: isDarkMode ? Colors.white : Colors.black,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: 'Table Label',
-                          labelStyle: TextStyle(
-                            color: isDarkMode ? Colors.grey.shade400 : null,
-                          ),
-                          border: const OutlineInputBorder(),
-                          hintText: 'e.g., Table by Window, VIP Table',
-                          hintStyle: TextStyle(
-                            color: isDarkMode ? Colors.grey.shade500 : null,
-                          ),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter a table label';
-                          }
-                          return null;
-                        },
+            const SizedBox(height: 20),
+
+            Card(
+              color: widget.isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Select Table',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: widget.isDarkMode ? Colors.white : Colors.black,
                       ),
-                      const SizedBox(height: 12),
-
-                      // Capacity
-                      TextFormField(
-                        controller: _capacityController,
-                        style: TextStyle(
-                          color: isDarkMode ? Colors.white : Colors.black,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<Map<String, dynamic>>(
+                      value: _selectedTable,
+                      decoration: InputDecoration(
+                        labelText: 'Choose a table',
+                        labelStyle: TextStyle(
+                          color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
                         ),
-                        decoration: InputDecoration(
-                          labelText: 'Capacity',
-                          labelStyle: TextStyle(
-                            color: isDarkMode ? Colors.grey.shade400 : null,
-                          ),
-                          border: const OutlineInputBorder(),
-                          hintText: 'e.g., 4',
-                          suffixText: 'people',
-                          hintStyle: TextStyle(
-                            color: isDarkMode ? Colors.grey.shade500 : null,
-                          ),
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
                         ),
-                        keyboardType: TextInputType.number,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Please enter capacity';
-                          }
-                          final capacity = int.tryParse(value);
-                          if (capacity == null || capacity <= 0) {
-                            return 'Please enter a valid number';
-                          }
-                          return null;
-                        },
+                        filled: widget.isDarkMode,
+                        fillColor: widget.isDarkMode ? const Color(0xFF333333) : null,
                       ),
-                      const SizedBox(height: 16),
-
-                      // Next Table Number
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(
-                              'Next Table Number:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w500,
-                                color: isDarkMode ? Colors.black : Colors.black87,
-                              ),
+                      dropdownColor: widget.isDarkMode ? const Color(0xFF333333) : Colors.white,
+                      style: TextStyle(
+                        color: widget.isDarkMode ? Colors.white : Colors.black,
+                      ),
+                      items: _tables.map((table) {
+                        return DropdownMenuItem(
+                          value: table,
+                          child: Text(
+                            'Table ${table['table_number']} - ${table['label']} (${table['capacity']} seats)',
+                            style: TextStyle(
+                              color: widget.isDarkMode ? Colors.white : Colors.black,
                             ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                '$_tableNumber',
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedTable = value;
+                          _generatedQrData = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            ElevatedButton(
+              onPressed: _generatingQr ? null : _generateAndSaveQrCode,
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: const Color(0xFF53B175),
+              ),
+              child: _generatingQr
+                  ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation(Colors.white),
+                ),
+              )
+                  : const Text(
+                'Generate QR Code',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+
+            if (_generatedQrData != null && _selectedTable != null && _selectedEstablishment != null) ...[
+              const SizedBox(height: 30),
+              Text(
+                'Generated QR Code',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 10),
+
+              Card(
+                elevation: 8,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                color: widget.isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      RepaintBoundary(
+                        key: _qrKey,
+                        child: Container(
+                          color: Colors.white,
+                          padding: const EdgeInsets.all(8),
+                          child: QrImageView(
+                            data: _generatedQrData!,
+                            version: QrVersions.auto,
+                            size: 200,
+                            backgroundColor: Colors.white,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
-
-                      // Generate Button
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isLoading ? null : _generateQRCode,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
+                      Text(
+                        'Table ${_selectedTable?['table_number']}',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: widget.isDarkMode ? Colors.white : Colors.black,
+                        ),
+                      ),
+                      if (_selectedTable?['label'] != null)
+                        Text(
+                          _selectedTable?['label']?.toString() ?? '',
+                          style: TextStyle(
+                            color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
                           ),
-                          icon: _isLoading
-                              ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                              : const Icon(Icons.qr_code_2),
-                          label: Text(
-                            _isLoading ? 'Generating...' : 'Generate QR Code',
-                            style: const TextStyle(fontSize: 16),
-                          ),
+                        ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Scan to order at ${_selectedEstablishment?['name']}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
 
-            // Generated QR Codes List
-            Text(
-              'Generated QR Codes',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black,
+              const SizedBox(height: 20),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _saveAsImage,
+                      icon: const Icon(Icons.image),
+                      label: const Text('Save as Image'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(
+                          color: widget.isDarkMode ? Colors.grey[600]! : Colors.grey[300]!,
+                        ),
+                        foregroundColor: widget.isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _generateAndSharePdf,
+                      icon: const Icon(Icons.picture_as_pdf),
+                      label: const Text('Save as PDF'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(
+                          color: widget.isDarkMode ? Colors.grey[600]! : Colors.grey[300]!,
+                        ),
+                        foregroundColor: widget.isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
 
-            if (_generatedQRCodes.isNotEmpty)
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.8,
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: _printQrCode,
+                icon: const Icon(Icons.print),
+                label: const Text('Print QR Code'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: BorderSide(
+                    color: widget.isDarkMode ? Colors.grey[600]! : Colors.grey[300]!,
+                  ),
+                  foregroundColor: widget.isDarkMode ? Colors.white : Colors.black,
                 ),
-                itemCount: _generatedQRCodes.length,
-                itemBuilder: (context, index) {
-                  return _buildQRCodeCard(_generatedQRCodes[index], isDarkMode);
-                },
-              )
-            else
-              _buildEmptyQRCodesState(isDarkMode),
+              ),
+            ],
+
+            const SizedBox(height: 40),
+
+            if (_tables.isNotEmpty) ...[
+              Text(
+                'Existing Table QR Codes',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: widget.isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 10),
+              ..._tables.where((table) => table['qr_code'] != null).map((table) {
+                final qrCode = table['qr_code']?.toString() ?? '';
+                final displayCode = qrCode.length > 20 ? '${qrCode.substring(0, 20)}...' : qrCode;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  color: widget.isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.table_restaurant,
+                      color: widget.isDarkMode ? const Color(0xFF53B175) : const Color(0xFF53B175),
+                    ),
+                    title: Text(
+                      'Table ${table['table_number']} - ${table['label']}',
+                      style: TextStyle(
+                        color: widget.isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'QR Code: $displayCode',
+                      style: TextStyle(
+                        color: widget.isDarkMode ? Colors.grey[400] : Colors.grey[600],
+                      ),
+                    ),
+                    trailing: const Icon(Icons.qr_code),
+                  ),
+                );
+              }).toList(),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _printQrCode() async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Print QR Code'),
+        content: const Text('Connect to a printer to print this QR code.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Printing feature requires printer setup'),
+                ),
+              );
+            },
+            child: const Text('Print'),
+          ),
+        ],
       ),
     );
   }

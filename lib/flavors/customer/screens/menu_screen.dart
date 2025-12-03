@@ -41,6 +41,10 @@ class _MenuScreenState extends State<MenuScreen> {
     _loadData();
     _searchController.addListener(_onSearchChanged);
   }
+  Future<void> _refreshData() async {
+    await _loadData();
+  }
+
 
   @override
   void dispose() {
@@ -64,11 +68,17 @@ class _MenuScreenState extends State<MenuScreen> {
 
       // Group items by category
       final Map<String, List<MenuItem>> groupedItems = {};
+      for (final category in categories) {
+        groupedItems[category.id] = [];
+      }
+
       for (final item in allItems) {
-        if (!groupedItems.containsKey(item.categoryId)) {
-          groupedItems[item.categoryId] = [];
+        if (groupedItems.containsKey(item.categoryId)) {
+          groupedItems[item.categoryId]!.add(item);
+        } else {
+          // Create category entry if it doesn't exist
+          groupedItems[item.categoryId] = [item];
         }
-        groupedItems[item.categoryId]!.add(item);
       }
 
       setState(() {
@@ -79,9 +89,10 @@ class _MenuScreenState extends State<MenuScreen> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to load menu: $e';
+        _error = 'Failed to load menu. Please try again.';
         _loading = false;
       });
+      debugPrint('Menu loading error: $e');
     }
   }
 
@@ -118,9 +129,6 @@ class _MenuScreenState extends State<MenuScreen> {
     });
   }
 
-  Future<void> _refreshData() async {
-    await _loadData();
-  }
 
   List<MenuItem> get _currentItems {
     if (_isSearching) {

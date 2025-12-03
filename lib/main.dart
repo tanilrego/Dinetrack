@@ -33,6 +33,7 @@ Future<void> main() async {
 class DineTrackApp extends StatelessWidget {
   const DineTrackApp({super.key});
 
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(

@@ -78,6 +78,8 @@ class _HomeCustomerState extends State<HomeCustomer> {
     }
   }
 
+
+
   Future<void> _performSearch(String query) async {
     try {
       final results = await _supabaseService.searchMenuItems(query, establishmentId: widget.establishmentId);
@@ -98,7 +100,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   Future<void> _refreshData() async {
-    _loadData();
+    setState(() {
+      _loadData();
+    });
     if (_isSearching && _searchQuery.isNotEmpty) {
       await _performSearch(_searchQuery);
     }
@@ -241,6 +245,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   // 👤 USER HEADER - SAFE SPLIT LOGIC
+  // Update the _buildUserHeader method in home_customer.dart
   Widget _buildUserHeader() {
     return FutureBuilder<UserProfile?>(
       future: _userProfileFuture,
@@ -248,18 +253,17 @@ class _HomeCustomerState extends State<HomeCustomer> {
         String userName = 'Guest';
         double dineCoins = 0.0;
 
-        // Safer logic for name extraction
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return _buildUserHeaderShimmer();
+        }
+
         if (snapshot.hasData && snapshot.data != null) {
-          final fullName = snapshot.data!.fullName;
-          if (fullName != null && fullName.isNotEmpty) {
-            final parts = fullName.split(' ');
-            if (parts.isNotEmpty) {
-              userName = parts.first;
-            } else {
-              userName = fullName;
-            }
+          final profile = snapshot.data!;
+          if (profile.fullName != null && profile.fullName!.isNotEmpty) {
+            final parts = profile.fullName!.split(' ');
+            userName = parts.isNotEmpty ? parts.first : profile.fullName!;
           }
-          dineCoins = snapshot.data!.dineCoinsBalance;
+          dineCoins = profile.dineCoinsBalance;
         }
 
         return Container(
@@ -305,11 +309,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: _primaryGreen.withValues(alpha: 0.3)),
+                  border: Border.all(color: _primaryGreen.withOpacity(0.3)),
                 ),
                 child: CircleAvatar(
                   radius: 22,
-                  backgroundColor: _primaryGreen.withValues(alpha: 0.1),
+                  backgroundColor: _primaryGreen.withOpacity(0.1),
                   child: Icon(Icons.person, color: _primaryGreen, size: 24),
                 ),
               ),
@@ -317,6 +321,53 @@ class _HomeCustomerState extends State<HomeCustomer> {
           ),
         );
       },
+    );
+  }
+
+// Add shimmer loading for user header
+  Widget _buildUserHeaderShimmer() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      color: Colors.white,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 100,
+                  height: 14,
+                  color: _lightGrey,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 150,
+                  height: 20,
+                  color: _lightGrey,
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  width: 120,
+                  height: 14,
+                  color: _lightGrey,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: _primaryGreen.withOpacity(0.3)),
+            ),
+            child: CircleAvatar(
+              radius: 22,
+              backgroundColor: _lightGrey,
+            ),
+          ),
+        ],
+      ),
     );
   }
 

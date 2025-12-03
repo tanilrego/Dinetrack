@@ -1,3 +1,4 @@
+//lib/core/models/menu_models.dart
 class AppCategory {
   final String id;
   final String establishmentId;
