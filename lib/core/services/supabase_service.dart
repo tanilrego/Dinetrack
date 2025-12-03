@@ -22,7 +22,7 @@ class SupabaseService {
 
   /// This is called AFTER Supabase.initialize() from main.dart
   Future<void> postInit() async {
-    developer.log("Supabase initialized with: $supabaseUrl", name: 'SupabaseService');
+    developer.log("Supabase  with: $supabaseUrl", name: 'SupabaseService');
   }
 
   SupabaseClient get client => Supabase.instance.client;

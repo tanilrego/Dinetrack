@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../../core/services/supabase_service.dart';
+import 'add_menu_item_page.dart'; // We'll create this
 
 class KitchenStaffScreen extends StatefulWidget {
   const KitchenStaffScreen({super.key});
@@ -10,16 +11,78 @@ class KitchenStaffScreen extends StatefulWidget {
 
 class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   final supabase = SupabaseService().client;
+  final SupabaseService _supabaseService = SupabaseService();
+
 
   List<Map<String, dynamic>> checkedInCustomers = [];
   bool isDarkMode = false;
   bool isLoading = true;
   int selectedMenuIndex = 0;
+  String _currentEstablishmentId = '';
 
   @override
   void initState() {
     super.initState();
+    _loadEstablishmentId();
     _loadCheckedInCustomers();
+  }
+
+
+  Future<void> _loadEstablishmentId() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user != null) {
+        print('Current auth user: ${user.id}');
+
+        // Check kitchen_assignments table
+        final kitchenData = await supabase
+            .from('kitchen_assignments')
+            .select('establishment_id')
+            .eq('user_id', user.id)
+            .eq('is_active', true)
+            .maybeSingle();
+
+        if (kitchenData != null) {
+          final establishmentId = kitchenData['establishment_id'].toString();
+          print('Found kitchen assignment. Establishment ID: $establishmentId');
+
+          setState(() {
+            _currentEstablishmentId = establishmentId;
+          });
+        } else {
+          print('No kitchen assignment found for user: ${user.id}');
+          print('Checking users table for user type...');
+
+          // Check user type in users table
+          final userData = await supabase
+              .from('users')
+              .select('user_type')
+              .eq('id', user.id)
+              .maybeSingle();
+
+          if (userData != null && userData['user_type'] == 'kitchen') {
+            print('User is kitchen staff but not assigned. Using first establishment.');
+
+            // Get first establishment
+            final establishments = await supabase
+                .from('establishments')
+                .select('id')
+                .limit(1);
+
+            if (establishments.isNotEmpty) {
+              final establishmentId = establishments[0]['id'].toString();
+              print('Using establishment: $establishmentId');
+
+              setState(() {
+                _currentEstablishmentId = establishmentId;
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error loading establishment ID: $e');
+    }
   }
 
   Future<void> _loadCheckedInCustomers() async {
@@ -67,6 +130,20 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
       setState(() => isLoading = false);
     }
   }
+  Future<void> _signOut() async {
+    try {
+      await _supabaseService.client.auth.signOut();
+      // Navigate to login screen or handle sign out
+      // You might want to use Navigator.pushReplacementNamed(context, '/login');
+    } catch (e) {
+      debugPrint('Error signing out: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error signing out: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -93,6 +170,52 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   }
 
   Widget _buildMainContent() {
+    switch (selectedMenuIndex) {
+      case 0:
+        return _buildDashboardView();
+      case 1:
+        return _buildClosedOrdersView();
+      case 2:
+        return _buildShoppingCartView();
+      case 3:
+        if (_currentEstablishmentId.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading establishment data...',
+                  style: TextStyle(
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        return AddMenuItemPage(
+          establishmentId: _currentEstablishmentId,
+          isDarkMode: isDarkMode,
+          onMenuItemAdded: () {
+            // Refresh or show success message
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Menu item added successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          },
+        );
+      case 4:
+        return _buildSettingsView();
+      default:
+        return _buildDashboardView();
+    }
+  }
+
+  Widget _buildDashboardView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -100,7 +223,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
         children: [
           Center(
             child: Text(
-              'SHANEMO RESTAURANT',
+              'DINETRACK',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -110,6 +233,102 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           ),
           const SizedBox(height: 32),
           _buildCustomersTable(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClosedOrdersView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.check_circle_outline,
+            size: 80,
+            color: isDarkMode ? Colors.white : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Closed Orders',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No closed orders available',
+            style: TextStyle(
+              fontSize: 16,
+              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShoppingCartView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.shopping_cart_outlined,
+            size: 80,
+            color: isDarkMode ? Colors.white : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Shopping Cart',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No items in cart',
+            style: TextStyle(
+              fontSize: 16,
+              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsView() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.settings_outlined,
+            size: 80,
+            color: isDarkMode ? Colors.white : Colors.grey,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Settings',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : Colors.black,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Configure your preferences',
+            style: TextStyle(
+              fontSize: 16,
+              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
+            ),
+          ),
         ],
       ),
     );
@@ -130,18 +349,50 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           const SizedBox(height: 24),
           _buildLogo(),
           const SizedBox(height: 40),
-          _buildSidebarIcon(Icons.dashboard, 0),
-          _buildSidebarIcon(Icons.close, 1),
-          _buildSidebarIcon(Icons.shopping_cart, 2),
-          _buildSidebarIcon(Icons.receipt, 3),
+          _buildSidebarIcon(Icons.dashboard, 0, 'Dashboard'),
+          _buildSidebarIcon(Icons.close, 1, 'Closed Orders'),
+          _buildSidebarIcon(Icons.shopping_cart, 2, 'Shopping'),
+          _buildSidebarIcon(Icons.receipt, 3, 'Add Menu Item'),
           const Spacer(),
-          _buildSidebarIcon(Icons.settings, 4),
+          _buildSidebarIcon(Icons.settings, 4, 'Settings'),
           const SizedBox(height: 24),
         ],
       ),
     );
   }
 
+  Widget _buildSidebarIcon(IconData icon, int index, String tooltip) {
+    bool isActive = selectedMenuIndex == index;
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            selectedMenuIndex = index;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: isActive ? Colors.white.withOpacity(0.2) : Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ... rest of your existing methods (_buildLogo, _buildTopBar, _buildCustomersTable, _buildCustomerRow)
+  // Keep all your existing methods from the original code
   Widget _buildLogo() {
     return Container(
       width: 60,
@@ -157,33 +408,6 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSidebarIcon(IconData icon, int index) {
-    bool isActive = selectedMenuIndex == index;
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedMenuIndex = index;
-        });
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: isActive ? Colors.white.withOpacity(0.2) : Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            icon,
-            color: Colors.white,
-            size: 24,
           ),
         ),
       ),
@@ -245,10 +469,12 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
                   constraints: const BoxConstraints(),
                 ),
                 const SizedBox(width: 8),
-                const CircleAvatar(
-                  radius: 16,
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.notifications, size: 20, color: Colors.white),
+                ElevatedButton(
+                  onPressed: _signOut,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.grey,
+                  ),
+                  child: Icon(Icons.logout, color: Colors.white),
                 ),
               ],
             ),

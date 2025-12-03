@@ -40,7 +40,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       final user = supabase.auth.currentUser;
       if (user != null) {
         final operatorData = await supabase
-            .from('operators')
+            .from('kitchen_assignments')
             .select('establishment_id')
             .eq('user_id', user.id)
             .maybeSingle();
@@ -83,7 +83,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
 
       // Load staff data
       final staffData = await supabase
-          .from('staff')
+          .from('staff_assignments')
           .select('name, email, role')
           .eq('is_active', true)
           .eq('establishment_id', _currentEstablishmentId);
