@@ -105,7 +105,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${menuItem.name} added to cart'),
-        backgroundColor: const Color(0xFF53B175),
+        backgroundColor: const Color(0xFF2196F3),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -399,7 +399,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF53B175),
+          selectedItemColor: const Color(0xFF2196F3),
           unselectedItemColor: const Color(0xFF7C7C7C),
           showSelectedLabels: false,
           showUnselectedLabels: false,
@@ -426,7 +426,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF53B175),
+                          color: Color(0xFF2196F3),
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
@@ -456,7 +456,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF53B175),
+                          color: Color(0xFF2196F3),
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(

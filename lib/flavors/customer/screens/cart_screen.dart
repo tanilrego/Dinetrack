@@ -9,7 +9,7 @@ class CartScreen extends StatelessWidget {
   final Function() onClearCart;
   final double cartTotal;
   final Function() onCheckout;
-  final Color _primaryGreen = const Color(0xFF53B175);
+  final Color _primaryGreen = const Color(0xFF2196F3);
 
   const CartScreen({
     super.key,
@@ -274,7 +274,7 @@ class CartScreen extends StatelessWidget {
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Color(0xFF53B175),
+                          color: Color(0xFF2196F3),
                         ),
                       ),
                     ],

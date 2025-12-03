@@ -59,7 +59,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF53B175);
+  final Color _primaryGreen = const Color(0xFF2196F3);
   final Color _lightGrey = const Color(0xFFF2F3F2);
   final Color _darkGrey = const Color(0xFF7C7C7C);
 

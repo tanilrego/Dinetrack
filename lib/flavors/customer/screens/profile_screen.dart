@@ -140,7 +140,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF53B175)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2196F3)))
           : ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -168,10 +168,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       children: [
         CircleAvatar(
           radius: 30,
-          backgroundColor: const Color(0xFF53B175).withValues(alpha: 0.1),
+          backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
           child: const Icon(
             Icons.person,
-            color: Color(0xFF53B175),
+            color: Color(0xFF2196F3),
             size: 30,
           ),
         ),
@@ -192,13 +192,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF53B175).withValues(alpha: 0.1),
+                  color: const Color(0xFF2196F3).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   userType.toUpperCase(),
                   style: const TextStyle(
-                    color: Color(0xFF53B175),
+                    color: Color(0xFF2196F3),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                   ),
