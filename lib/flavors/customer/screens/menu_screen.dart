@@ -38,6 +38,8 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void initState() {
     super.initState();
+    print('MenuScreen - Establishment ID: "${widget.establishmentId}"');
+    print('Is empty? ${widget.establishmentId.isEmpty}');
     _loadData();
     _searchController.addListener(_onSearchChanged);
   }
@@ -59,43 +61,139 @@ class _MenuScreenState extends State<MenuScreen> {
       _error = '';
     });
 
+    if (widget.establishmentId.isEmpty) {
+      setState(() {
+        _error = 'No establishment selected';
+        _loading = false;
+      });
+      return;
+    }
+
     try {
       // Load categories
       final categories = await _supabaseService.getCategories(establishmentId: widget.establishmentId);
+      print('DEBUG: Categories loaded: ${categories.length}');
 
       // Load all menu items
       final allItems = await _supabaseService.getMenuItemsByEstablishment(widget.establishmentId);
+      print('DEBUG: Menu items loaded: ${allItems.length}');
+
+      if (allItems.isEmpty) {
+        print('DEBUG: No menu items found');
+        setState(() {
+          _categories = [];
+          _menuItemsByCategory = {};
+          _selectedCategoryId = '';
+          _loading = false;
+        });
+        return;
+      }
+
+      // If categories are empty but items exist, fetch categories from items
+      if (categories.isEmpty && allItems.isNotEmpty) {
+        print('DEBUG: No categories found, but items exist. Fetching categories from items...');
+
+        // Get unique category IDs from items
+        final categoryIds = allItems.map((item) => item.categoryId).toSet().toList();
+        print('DEBUG: Unique category IDs from items: $categoryIds');
+
+        // Fetch these categories directly - FIXED: Using manual OR query
+        final orConditions = categoryIds.map((id) => 'id.eq.$id').join(',');
+        final response = await _supabaseService.client
+            .from('menu_categories')
+            .select()
+            .or(orConditions)
+            .eq('is_active', true)
+            .order('display_order');
+
+        if (response.isNotEmpty) {
+          final fetchedCategories = (response as List)
+              .map((cat) => AppCategory.fromJson(cat))
+              .toList();
+          print('DEBUG: Fetched ${fetchedCategories.length} categories from items');
+          _categories = fetchedCategories;
+        } else {
+          // Create dummy categories from item data
+          print('DEBUG: Creating dummy categories from items');
+          _categories = categoryIds.map((id) {
+            // Find an item with this category
+            final itemWithCategory = allItems.firstWhere((item) => item.categoryId == id);
+            return AppCategory(
+              id: id,
+              name: 'Category $id',
+              establishmentId: widget.establishmentId,
+              isActive: true,
+              displayOrder: 0,
+            );
+          }).toList();
+        }
+      } else {
+        _categories = categories;
+      }
 
       // Group items by category
       final Map<String, List<MenuItem>> groupedItems = {};
-      for (final category in categories) {
+
+      // Initialize with all categories
+      for (final category in _categories) {
         groupedItems[category.id] = [];
       }
 
+      // Add items to their categories
       for (final item in allItems) {
         if (groupedItems.containsKey(item.categoryId)) {
           groupedItems[item.categoryId]!.add(item);
         } else {
-          // Create category entry if it doesn't exist
-          groupedItems[item.categoryId] = [item];
+          // Category not in our list, create it
+          print('DEBUG: Item ${item.name} has unknown category ${item.categoryId}');
+          if (!groupedItems.containsKey(item.categoryId)) {
+            groupedItems[item.categoryId] = [];
+          }
+          groupedItems[item.categoryId]!.add(item);
+
+          // Also add to categories list if not already there
+          if (!_categories.any((cat) => cat.id == item.categoryId)) {
+            _categories.add(AppCategory(
+              id: item.categoryId,
+              name: 'Category ${item.categoryId.substring(0, 8)}...',
+              establishmentId: widget.establishmentId,
+              isActive: true,
+              displayOrder: 999, // Put at the end
+            ));
+          }
         }
       }
 
+      // Log the grouping result
+      print('DEBUG: Final categories: ${_categories.length}');
+      print('DEBUG: Grouped items:');
+      groupedItems.forEach((categoryId, items) {
+        print('  Category $categoryId: ${items.length} items');
+      });
+
       setState(() {
-        _categories = categories;
         _menuItemsByCategory = groupedItems;
-        _selectedCategoryId = categories.isNotEmpty ? categories.first.id : '';
+
+        if (_categories.isNotEmpty) {
+          _selectedCategoryId = _categories.first.id;
+          print('DEBUG: Selected category ID: $_selectedCategoryId');
+          print('DEBUG: Items in selected category: ${groupedItems[_selectedCategoryId]?.length ?? 0}');
+        } else {
+          _selectedCategoryId = '';
+          print('DEBUG: No categories found');
+        }
+
         _loading = false;
       });
     } catch (e) {
+      print('ERROR in _loadData: $e');
+      print('STACK TRACE: ${e.toString()}');
       setState(() {
         _error = 'Failed to load menu. Please try again.';
         _loading = false;
       });
-      debugPrint('Menu loading error: $e');
     }
   }
-
   void _onSearchChanged() {
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
@@ -327,12 +425,18 @@ class _MenuScreenState extends State<MenuScreen> {
       ),
       const SizedBox(height: 8),
       // Selected Category Title
+// Selected Category Title
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
             Text(
-              _categories.firstWhere((cat) => cat.id == _selectedCategoryId, orElse: () => _categories.first).name,
+              _categories.isEmpty
+                  ? 'Menu'
+                  : _categories.firstWhere(
+                    (cat) => cat.id == _selectedCategoryId,
+                orElse: () => _categories.first,
+              ).name,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,

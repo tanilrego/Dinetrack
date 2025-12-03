@@ -153,7 +153,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       case 2:
         return _buildOrdersView();
       case 3:
-        return QrCodeGeneratorScreen(
+        return QRCodeGeneratorPage(
           establishmentId: _currentEstablishmentId,
           isDarkMode: isDarkMode,
           onBackToDashboard: () {

@@ -20,6 +20,44 @@ class HomeCustomer extends StatefulWidget {
 }
 
 class _HomeCustomerState extends State<HomeCustomer> {
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+    _searchController.addListener(_onSearchChanged);
+
+    // DEBUG: Check the establishment ID
+    print('🚨 HomeCustomer - Establishment ID: "${widget.establishmentId}"');
+    print('🚨 HomeCustomer - ID Length: ${widget.establishmentId.length}');
+    print('🚨 HomeCustomer - Is Empty: ${widget.establishmentId.isEmpty}');
+
+    // If ID is empty, show an error immediately
+    if (widget.establishmentId.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showEmptyEstablishmentError();
+      });
+    }
+
+    _loadData();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  void _showEmptyEstablishmentError() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: const Text('No establishment selected. Please go back and select an establishment.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   final SupabaseService _supabaseService = SupabaseService();
   final Color _primaryGreen = const Color(0xFF53B175);
   final Color _lightGrey = const Color(0xFFF2F3F2);
@@ -36,12 +74,6 @@ class _HomeCustomerState extends State<HomeCustomer> {
   bool _isSearching = false;
   String _searchQuery = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _loadData();
-    _searchController.addListener(_onSearchChanged);
-  }
 
   @override
   void dispose() {
