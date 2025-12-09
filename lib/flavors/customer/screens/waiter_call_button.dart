@@ -5,7 +5,11 @@ import '../../../../core/services/supabase_service.dart';
 class WaiterCallButton extends StatefulWidget {
   final String establishmentId;
   final String tableId;
-  const WaiterCallButton({super.key, required this.establishmentId, required this.tableId});
+  const WaiterCallButton({
+    super.key,
+    required this.establishmentId,
+    required this.tableId,
+  });
 
   @override
   State<WaiterCallButton> createState() => _WaiterCallButtonState();
@@ -23,22 +27,26 @@ class _WaiterCallButtonState extends State<WaiterCallButton> {
         'establishment_id': widget.establishmentId,
         'table_id': widget.tableId,
         'status': 'open',
-        'created_at': DateTime.now().toUtc().toIso8601String()
+        'created_at': DateTime.now().toUtc().toIso8601String(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Waiter called successfully!'),
             backgroundColor: Colors.green,
-          )
-      );
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to call waiter: $e'),
             backgroundColor: Colors.red,
-          )
-      );
+          ),
+        );
+      }
     } finally {
       setState(() => _sending = false);
     }

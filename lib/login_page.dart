@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dinetrack/flavors/customer/screens/registration.dart';
 
 import 'core/services/supabase_service.dart';
+import 'core/routing/role_router.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -16,27 +17,6 @@ class _LoginPageState extends State<LoginPage> {
   final _passwordController = TextEditingController();
   bool _busy = false;
   String? _errorMessage;
-
-  /*Future<void> _loginWithEmailPassword() async {
-    setState(() {
-      _busy = true;
-      _errorMessage = null;
-    });
-
-    try {
-      await SupabaseService().client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      // Login successful - AuthGate in main.dart will handle routing
-    } on AuthException catch (e) {
-      setState(() => _errorMessage = e.message);
-    } catch (e) {
-      setState(() => _errorMessage = 'Login failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }*/
 
   Future<void> _loginWithEmailPassword() async {
     setState(() {
@@ -58,41 +38,44 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      print("LOGGED IN USER: ${user.id}");
+      // print("LOGGED IN USER: ${user.id}");
 
       // 2. Check if user metadata already exists
-      final existing = await SupabaseService()
-          .client
+      final existing = await SupabaseService().client
           .from('users')
           .select()
           .eq('id', user.id)
           .maybeSingle();
 
       if (existing == null) {
-        print("User metadata does NOT exist — inserting new row...");
+        // print("User metadata does NOT exist — inserting new row...");
 
         // 3. Insert metadata on first login after email verification
-        final insertResponse = await SupabaseService()
-            .client
+        await SupabaseService().client
             .from('users')
             .insert({
-          'id': user.id,
-          'email': user.email,
-          'full_name': '', // optional: fill using saved controllers
-          'phone': '',
-          'user_type': 'customer',
-          'dine_coins_balance': 0,
-        })
+              'id': user.id,
+              'email': user.email,
+              'full_name': '', // optional: fill using saved controllers
+              'phone': '',
+              'user_type': 'customer',
+              'dine_coins_balance': 0,
+            })
             .select()
             .single();
 
-        print("USER METADATA INSERTED: $insertResponse");
+        // print("USER METADATA INSERTED: $insertResponse");
       } else {
-        print("User metadata already exists — skipping insert.");
+        // print("User metadata already exists — skipping insert.");
       }
 
-      // 🟢 Do NOT navigate here — AuthGate will handle routing.
-
+      // 🟢 Navigate to RoleBasedRouter to handle direction based on user type
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => RoleBasedRouter(userId: user.id)),
+          (route) => false,
+        );
+      }
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     } catch (e) {
@@ -102,28 +85,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-
-  Future<void> _signInAsGuest() async {
-    setState(() {
-      _busy = true;
-      _errorMessage = null;
-    });
-
-    try {
-      // Use predefined guest account
-      await SupabaseService().client.auth.signInWithPassword(
-        email: 'guest@dinetrack.com',
-        password: 'guest123456',
-      );
-    } on AuthException catch (e) {
-      setState(() => _errorMessage = 'Failed to login as guest: ${e.message}');
-    } catch (e) {
-      setState(() => _errorMessage = 'Failed to login as guest: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
+  // Guest login removed from here
 
   @override
   Widget build(BuildContext context) {
@@ -135,16 +97,12 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-
               /// LOGO
               Padding(
                 padding: const EdgeInsets.only(bottom: 30),
                 child: Column(
                   children: [
-                    Image.asset(
-                      'assets/images/logo.png',
-                      height: 160,
-                    ),
+                    Image.asset('assets/images/logo.png', height: 160),
                     const SizedBox(height: 8),
                     const Text(
                       "DINETRACK",
@@ -163,16 +121,21 @@ class _LoginPageState extends State<LoginPage> {
               Card(
                 elevation: 6,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(16),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
-                      vertical: 24, horizontal: 20),
+                    vertical: 24,
+                    horizontal: 20,
+                  ),
                   child: Column(
                     children: [
                       const Text(
                         "Welcome",
                         style: TextStyle(
-                            fontSize: 20, fontWeight: FontWeight.w600),
+                          fontSize: 20,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       const SizedBox(height: 25),
 
@@ -218,55 +181,37 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                           child: _busy
                               ? const CircularProgressIndicator(
-                              color: Colors.white)
+                                  color: Colors.white,
+                                )
                               : const Text(
-                            "Login",
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white
-                            ),
-                          ),
+                                  "Login",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                       const SizedBox(height: 10),
 
-                      /// SIGN UP BUTTON
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                            onPressed: _busy
-                                ? null
-                                : () {
+                      /// REGISTER TEXT LINK
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Text("Don't have an account? "),
+                          TextButton(
+                            onPressed: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const RegisterPage()),
+                                MaterialPageRoute(
+                                  builder: (_) => const RegisterPage(),
+                                ),
                               );
                             },
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            child: const Text("Register"),
                           ),
-                          child: const Text("Create Account"),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-
-                      /// LOGIN AS GUEST
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: _busy ? null : _signInAsGuest,
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: const Text("Login as Guest"),
-                        ),
+                        ],
                       ),
 
                       /// ERROR MESSAGE
@@ -276,7 +221,9 @@ class _LoginPageState extends State<LoginPage> {
                           _errorMessage!,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
-                              color: Colors.red, fontSize: 14),
+                            color: Colors.red,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ],
@@ -290,10 +237,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Text(
                   "Contact administrator for operator/supervisor accounts",
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ),
             ],

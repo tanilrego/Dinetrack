@@ -1,0 +1,9 @@
+# Deploy Edge Functions
+supabase functions deploy create-paychangu-payment
+supabase functions deploy paychangu-webhook
+supabase functions deploy check-payment-status
+
+# Set environment variables
+supabase secrets set PAYCHANGU_API_KEY="SEC-TEST-awHuCpW5cLHMeMSCf9Swix4qo6qj9mXH"
+supabase secrets set PAYCHANGU_WEBHOOK_SECRET="PUB-TEST-YcEtbrqAEIaF5TmSWYGoD6bUNsWUOsrT"
+supabase secrets set PAYCHANGU_API_URL="https://api.paychangu.com/v1"

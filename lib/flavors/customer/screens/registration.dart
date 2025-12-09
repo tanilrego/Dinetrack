@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class RegisterPage extends StatefulWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
-  _RegisterPageState createState() => _RegisterPageState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
 class _RegisterPageState extends State<RegisterPage> {
@@ -40,26 +40,26 @@ class _RegisterPageState extends State<RegisterPage> {
       );
 
       final user = authResponse.user;
-      print('User from signUp: id=${user?.id}, email=${user?.email}');
+      // print('User from signUp: id=${user?.id}, email=${user?.email}');
 
       if (user != null) {
         // IMPORTANT: Do NOT sign in automatically after signup, because email not confirmed yet.
         // Instead, show info to user to confirm email first.
 
         _showInfoDialog(
-            'Registration successful! Please check your email and confirm your account before logging in.'
+          'Registration successful! Please check your email and confirm your account before logging in.',
         );
       }
     } on AuthException catch (error) {
       _showErrorDialog("AUTH ERROR:\n${error.message}");
     } on PostgrestException catch (error) {
-      print('Full PostgrestException: ${error.toJson()}');
+      // print('Full PostgrestException: ${error.toJson()}');
       _showErrorDialog(
         "POSTGREST ERROR:\n${error.message}\n\n"
-            "DETAILS: ${error.details ?? 'No details'}\n"
-            "HINT: ${error.hint ?? 'No hint'}\n"
-            "CODE: ${error.code}\n"
-            "MESSAGE: ${error.message}\n",
+        "DETAILS: ${error.details ?? 'No details'}\n"
+        "HINT: ${error.hint ?? 'No hint'}\n"
+        "CODE: ${error.code}\n"
+        "MESSAGE: ${error.message}\n",
       );
     } catch (error, stack) {
       _showErrorDialog("UNEXPECTED ERROR:\n$error\n\nSTACK TRACE:\n$stack");
@@ -88,7 +88,6 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-
   void _showErrorDialog(String message) {
     showDialog(
       context: context,
@@ -105,11 +104,10 @@ class _RegisterPageState extends State<RegisterPage> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:  const Color(0xffF2F2F2),
+      backgroundColor: const Color(0xffF2F2F2),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -124,10 +122,7 @@ class _RegisterPageState extends State<RegisterPage> {
                     padding: const EdgeInsets.only(bottom: 30),
                     child: Column(
                       children: [
-                        Image.asset(
-                          'assets/images/logo.png',
-                          height: 160,
-                        ),
+                        Image.asset('assets/images/logo.png', height: 160),
                         const SizedBox(height: 8),
                         const Text(
                           "DINETRACK",
@@ -233,8 +228,9 @@ class _RegisterPageState extends State<RegisterPage> {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your email';
                             }
-                            if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
-                                .hasMatch(value)) {
+                            if (!RegExp(
+                              r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
+                            ).hasMatch(value)) {
                               return 'Please enter a valid email';
                             }
                             return null;
@@ -309,20 +305,20 @@ class _RegisterPageState extends State<RegisterPage> {
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
-                        ),
-                      )
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
                           : const Text(
-                        'Create Account',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                              'Create Account',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -332,14 +328,11 @@ class _RegisterPageState extends State<RegisterPage> {
                     onPressed: _isLoading
                         ? null
                         : () {
-                      Navigator.pop(context);
-                    },
+                            Navigator.pop(context);
+                          },
                     child: const Text(
                       'Back to Login',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.blue,
-                      ),
+                      style: TextStyle(fontSize: 16, color: Colors.blue),
                     ),
                   ),
                 ],

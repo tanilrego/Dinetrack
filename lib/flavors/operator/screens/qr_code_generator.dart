@@ -10,15 +10,15 @@ class QRCodeGeneratorPage extends StatefulWidget {
   final VoidCallback? onQRCodeGenerated;
 
   const QRCodeGeneratorPage({
-    Key? key,
+    super.key,
     required this.establishmentId,
     required this.isDarkMode,
     this.onBackToDashboard,
     this.onQRCodeGenerated,
-  }) : super(key: key);
+  });
 
   @override
-  _QRCodeGeneratorPageState createState() => _QRCodeGeneratorPageState();
+  State<QRCodeGeneratorPage> createState() => _QRCodeGeneratorPageState();
 }
 
 class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
@@ -60,13 +60,13 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         });
       }
     } catch (error) {
-      print('Error loading table number: $error');
+      // print('Error loading table number: $error');
     }
   }
 
   Future<void> _loadExistingQRCodes() async {
     if (widget.establishmentId.isEmpty) {
-      print('Cannot load QR codes: establishmentId is empty');
+      // print('Cannot load QR codes: establishmentId is empty');
       return;
     }
 
@@ -81,25 +81,27 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         _generatedQRCodes = List<Map<String, dynamic>>.from(response);
       });
     } on PostgrestException catch (e) {
-      print('Error loading QR codes (Postgrest): ${e.message}');
+      // print('Error loading QR codes (Postgrest): ${e.message}');
       _showErrorDialog('Failed to load existing QR codes: ${e.message}');
     } catch (error) {
-      print('Error loading QR codes: $error');
+      // print('Error loading QR codes: $error');
     }
   }
 
   String _generateUniqueQRCode() {
     final random = Random();
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    final uniqueCode = List.generate(8, (index) =>
-    chars[random.nextInt(chars.length)]).join();
+    final uniqueCode = List.generate(
+      8,
+      (index) => chars[random.nextInt(chars.length)],
+    ).join();
 
-    return 'table-${_tableNumber}-$uniqueCode';
+    return 'table-$_tableNumber-$uniqueCode';
   }
 
   String _generateQRCodeData(String qrCodeId) {
-    // Update this to include establishment ID for better tracking
-    return 'https://your-app-domain.com/menu?table=$qrCodeId&establishment=${widget.establishmentId}';
+    // Production URL for deployed app
+    return 'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}';
   }
 
   Future<void> _generateQRCode() async {
@@ -118,8 +120,10 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     );
 
     if (!uuidRegex.hasMatch(widget.establishmentId)) {
-      _showErrorDialog('Invalid establishment ID format. Please contact support.');
-      print('Invalid establishment ID format: ${widget.establishmentId}');
+      _showErrorDialog(
+        'Invalid establishment ID format. Please contact support.',
+      );
+      // print('Invalid establishment ID format: ${widget.establishmentId}');
       return;
     }
 
@@ -132,9 +136,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
       final qrCodeData = _generateQRCodeData(qrCodeId);
 
       // Insert into Supabase
-      final response = await _supabase
-          .from('tables')
-          .insert({
+      final response = await _supabase.from('tables').insert({
         'establishment_id': widget.establishmentId,
         'label': _tableLabelController.text.trim(),
         'table_number': _tableNumber,
@@ -142,8 +144,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         'qr_code_data': qrCodeData,
         'capacity': int.tryParse(_capacityController.text) ?? 4,
         'is_available': true,
-      })
-          .select();
+      }).select();
 
       if (response.isNotEmpty) {
         // Add to local list
@@ -170,9 +171,9 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
       }
     } on PostgrestException catch (e) {
       // Handle Supabase-specific errors
-      print('PostgrestException: ${e.message}');
-      print('Details: ${e.details}');
-      print('Hint: ${e.hint}');
+      // print('PostgrestException: ${e.message}');
+      // print('Details: ${e.details}');
+      // print('Hint: ${e.hint}');
       _showErrorDialog('Database error: ${e.message}');
     } catch (error) {
       _showErrorDialog('Failed to generate QR code: $error');
@@ -195,18 +196,12 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
             const SizedBox(height: 10),
             Text(
               'QR Code ID: $qrCodeId',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
             ),
             const SizedBox(height: 10),
             Text(
               'Table #${_tableNumber - 1}',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ],
         ),
@@ -240,9 +235,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     // Implement QR code download/saving functionality
     // You can use packages like image_gallery_saver or share_plus
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Download functionality coming soon!'),
-      ),
+      const SnackBar(content: Text('Download functionality coming soon!')),
     );
   }
 
@@ -255,7 +248,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -276,8 +269,17 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
                 data: qrCode['qr_code_data'] ?? '',
                 version: QrVersions.auto,
                 size: 104,
-                backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-                foregroundColor: isDarkMode ? Colors.white : Colors.black,
+                backgroundColor: isDarkMode
+                    ? const Color(0xFF2A2A2A)
+                    : Colors.white,
+                eyeStyle: QrEyeStyle(
+                  eyeShape: QrEyeShape.square,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
+                dataModuleStyle: QrDataModuleStyle(
+                  dataModuleShape: QrDataModuleShape.square,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
               ),
             ),
             const SizedBox(height: 8),
@@ -335,9 +337,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
         title: Text(
           'QR Code Details',
-          style: TextStyle(
-            color: isDarkMode ? Colors.white : Colors.black,
-          ),
+          style: TextStyle(color: isDarkMode ? Colors.white : Colors.black),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -355,18 +355,42 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
                     data: qrCode['qr_code_data'] ?? '',
                     version: QrVersions.auto,
                     size: 150,
-                    backgroundColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-                    foregroundColor: isDarkMode ? Colors.white : Colors.black,
+                    backgroundColor: isDarkMode
+                        ? const Color(0xFF2A2A2A)
+                        : Colors.white,
+                    eyeStyle: QrEyeStyle(
+                      eyeShape: QrEyeShape.square,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                    ),
+                    dataModuleStyle: QrDataModuleStyle(
+                      dataModuleShape: QrDataModuleShape.square,
+                      color: isDarkMode ? Colors.white : Colors.black,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
-              _buildDetailRow('Table Label:', qrCode['label'] ?? '', isDarkMode),
-              _buildDetailRow('Table Number:', '${qrCode['table_number']}', isDarkMode),
-              _buildDetailRow('QR Code ID:', qrCode['qr_code'] ?? '', isDarkMode),
+              _buildDetailRow(
+                'Table Label:',
+                qrCode['label'] ?? '',
+                isDarkMode,
+              ),
+              _buildDetailRow(
+                'Table Number:',
+                '${qrCode['table_number']}',
+                isDarkMode,
+              ),
+              _buildDetailRow(
+                'QR Code ID:',
+                qrCode['qr_code'] ?? '',
+                isDarkMode,
+              ),
               _buildDetailRow('Capacity:', '${qrCode['capacity']}', isDarkMode),
-              _buildDetailRow('Status:',
-                  (qrCode['is_available'] ?? false) ? 'Available' : 'Occupied', isDarkMode),
+              _buildDetailRow(
+                'Status:',
+                (qrCode['is_available'] ?? false) ? 'Available' : 'Occupied',
+                isDarkMode,
+              ),
               const SizedBox(height: 8),
               Text(
                 'Scan this QR code to access the menu',
@@ -432,7 +456,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -442,11 +466,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.qr_code_2,
-              size: 80,
-              color: Colors.grey.shade400,
-            ),
+            Icon(Icons.qr_code_2, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
               'No QR Codes Generated Yet',
@@ -459,10 +479,7 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
             const SizedBox(height: 8),
             Text(
               'Create QR codes for your tables to get started',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -472,7 +489,10 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF2563EB),
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -489,7 +509,9 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     final isDarkMode = widget.isDarkMode;
 
     return Scaffold(
-      backgroundColor: isDarkMode ? const Color(0xFF1A1A1A) : const Color(0xFFF5F5F5),
+      backgroundColor: isDarkMode
+          ? const Color(0xFF1A1A1A)
+          : const Color(0xFFF5F5F5),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -636,7 +658,9 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
                               'Next Table Number:',
                               style: TextStyle(
                                 fontWeight: FontWeight.w500,
-                                color: isDarkMode ? Colors.black : Colors.black87,
+                                color: isDarkMode
+                                    ? Colors.black
+                                    : Colors.black87,
                               ),
                             ),
                             const Spacer(),
@@ -677,13 +701,13 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
                           ),
                           icon: _isLoading
                               ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
                               : const Icon(Icons.qr_code_2),
                           label: Text(
                             _isLoading ? 'Generating...' : 'Generate QR Code',

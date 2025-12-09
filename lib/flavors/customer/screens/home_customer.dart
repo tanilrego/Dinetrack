@@ -2,17 +2,32 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
 import './menu_screen.dart';
+import './waiter_call_button.dart';
 
 class HomeCustomer extends StatefulWidget {
   final String establishmentId;
+  final String? tableId;
   final Function(MenuItem, {int quantity}) onAddToCart;
   final int cartItemCount;
+  final Map<String, CartItem> cartItems;
+  final Function(String, int) onUpdateQuantity;
+  final Function(String) onRemoveFromCart;
+  final Function() onClearCart;
+  final double cartTotal;
+  final Function() onCheckout;
 
   const HomeCustomer({
     super.key,
     required this.establishmentId,
+    this.tableId,
     required this.onAddToCart,
     required this.cartItemCount,
+    required this.cartItems,
+    required this.onUpdateQuantity,
+    required this.onRemoveFromCart,
+    required this.onClearCart,
+    required this.cartTotal,
+    required this.onCheckout,
   });
 
   @override
@@ -27,9 +42,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
     _searchController.addListener(_onSearchChanged);
 
     // DEBUG: Check the establishment ID
-    print('🚨 HomeCustomer - Establishment ID: "${widget.establishmentId}"');
-    print('🚨 HomeCustomer - ID Length: ${widget.establishmentId.length}');
-    print('🚨 HomeCustomer - Is Empty: ${widget.establishmentId.isEmpty}');
+    // print('🚨 HomeCustomer - Establishment ID: "${widget.establishmentId}"');
+    // print('🚨 HomeCustomer - ID Length: ${widget.establishmentId.length}');
+    // print('🚨 HomeCustomer - Is Empty: ${widget.establishmentId.isEmpty}');
 
     // If ID is empty, show an error immediately
     if (widget.establishmentId.isEmpty) {
@@ -47,7 +62,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Error'),
-        content: const Text('No establishment selected. Please go back and select an establishment.'),
+        content: const Text(
+          'No establishment selected. Please go back and select an establishment.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -59,7 +76,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF2196F3);
+  final Color _primaryGreen = const Color(0xFF2196F3); // Changed to Blue
   final Color _lightGrey = const Color(0xFFF2F3F2);
   final Color _darkGrey = const Color(0xFF7C7C7C);
 
@@ -74,7 +91,6 @@ class _HomeCustomerState extends State<HomeCustomer> {
   bool _isSearching = false;
   String _searchQuery = '';
 
-
   @override
   void dispose() {
     _searchController.removeListener(_onSearchChanged);
@@ -84,11 +100,19 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
   void _loadData() {
     setState(() {
-      _categoriesFuture = _supabaseService.getCategories(establishmentId: widget.establishmentId);
-      _bestsellersFuture = _supabaseService.getBestsellers(establishmentId: widget.establishmentId);
-      _recommendedFuture = _supabaseService.getRecommended(establishmentId: widget.establishmentId);
+      _categoriesFuture = _supabaseService.getCategories(
+        //establishmentId: widget.establishmentId,
+      );
+      _bestsellersFuture = _supabaseService.getBestsellers(
+        establishmentId: widget.establishmentId,
+      );
+      _recommendedFuture = _supabaseService.getRecommended(
+        establishmentId: widget.establishmentId,
+      );
       _userProfileFuture = _supabaseService.getCurrentUserProfile();
-      _establishmentFuture = _supabaseService.getEstablishment(widget.establishmentId);
+      _establishmentFuture = _supabaseService.getEstablishment(
+        widget.establishmentId,
+      );
     });
   }
 
@@ -110,16 +134,17 @@ class _HomeCustomerState extends State<HomeCustomer> {
     }
   }
 
-
-
   Future<void> _performSearch(String query) async {
     try {
-      final results = await _supabaseService.searchMenuItems(query, establishmentId: widget.establishmentId);
+      final results = await _supabaseService.searchMenuItems(
+        query,
+        establishmentId: widget.establishmentId,
+      );
       setState(() {
         _searchResults = results;
       });
     } catch (e) {
-      debugPrint('Search error: $e');
+      // debugPrint('Search error: $e');
     }
   }
 
@@ -148,6 +173,12 @@ class _HomeCustomerState extends State<HomeCustomer> {
           establishmentId: widget.establishmentId,
           onAddToCart: widget.onAddToCart,
           cartItemCount: widget.cartItemCount,
+          cartItems: widget.cartItems,
+          onUpdateQuantity: widget.onUpdateQuantity,
+          onRemoveFromCart: widget.onRemoveFromCart,
+          onClearCart: widget.onClearCart,
+          cartTotal: widget.cartTotal,
+          onCheckout: widget.onCheckout,
         ),
       ),
     );
@@ -189,14 +220,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 child: CustomScrollView(
                   slivers: [
                     // 🔍 SEARCH BAR
-                    SliverToBoxAdapter(
-                      child: _buildSearchBar(),
-                    ),
+                    SliverToBoxAdapter(child: _buildSearchBar()),
 
                     // 🎯 HERO BANNER
-                    SliverToBoxAdapter(
-                      child: _buildHeroBanner(),
-                    ),
+                    SliverToBoxAdapter(child: _buildHeroBanner()),
 
                     // CONTENT BASED ON SEARCH STATE
                     if (_isSearching) ..._buildSearchContent(),
@@ -208,6 +235,12 @@ class _HomeCustomerState extends State<HomeCustomer> {
           ],
         ),
       ),
+      floatingActionButton: widget.tableId != null
+          ? WaiterCallButton(
+              establishmentId: widget.establishmentId,
+              tableId: widget.tableId!,
+            )
+          : null,
     );
   }
 
@@ -242,25 +275,36 @@ class _HomeCustomerState extends State<HomeCustomer> {
     return [
       // 🍽️ CATEGORIES SECTION
       SliverToBoxAdapter(
-        child: _buildSectionHeader("Categories", "See All", onSeeAll: _navigateToMenuScreen),
+        child: _buildSectionHeader(
+          "Categories",
+          "See All",
+          onSeeAll: _navigateToMenuScreen,
+        ),
       ),
-      SliverToBoxAdapter(
-        child: _buildCategoriesRow(),
-      ),
+      SliverToBoxAdapter(child: _buildCategoriesRow()),
 
       // 🔥 BEST SELLERS
       SliverToBoxAdapter(
-        child: _buildSectionHeader("Best Sellers", "See All", onSeeAll: _navigateToMenuScreen),
+        child: _buildSectionHeader(
+          "Best Sellers",
+          "See All",
+          onSeeAll: _navigateToMenuScreen,
+        ),
       ),
       SliverToBoxAdapter(
         child: FutureBuilder<List<MenuItem>>(
           future: _bestsellersFuture,
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const SizedBox(height: 200, child: Center(child: CircularProgressIndicator()));
+              return const SizedBox(
+                height: 200,
+                child: Center(child: CircularProgressIndicator()),
+              );
             }
             // Check errors
-            if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
+            if (snapshot.hasError ||
+                !snapshot.hasData ||
+                snapshot.data!.isEmpty) {
               return _buildEmptySection("No bestsellers available");
             }
             return _buildBestSellersGrid(snapshot.data!);
@@ -270,7 +314,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
       // 💚 RECOMMENDED FOR YOU
       SliverToBoxAdapter(
-        child: _buildSectionHeader("Recommended for you", "See All", onSeeAll: _navigateToMenuScreen),
+        child: _buildSectionHeader(
+          "Recommended for you",
+          "See All",
+          onSeeAll: _navigateToMenuScreen,
+        ),
       ),
       _buildRecommendedGrid(), // Updated logic inside
     ];
@@ -300,9 +348,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-          ),
+          decoration: const BoxDecoration(color: Colors.white),
           child: Row(
             children: [
               Expanded(
@@ -311,10 +357,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
                   children: [
                     Text(
                       "Good ${_getTimeBasedGreeting()}!",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: _darkGrey,
-                      ),
+                      style: TextStyle(fontSize: 14, color: _darkGrey),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -341,11 +384,13 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: _primaryGreen.withOpacity(0.3)),
+                  border: Border.all(
+                    color: _primaryGreen.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: CircleAvatar(
                   radius: 22,
-                  backgroundColor: _primaryGreen.withOpacity(0.1),
+                  backgroundColor: _primaryGreen.withValues(alpha: 0.1),
                   child: Icon(Icons.person, color: _primaryGreen, size: 24),
                 ),
               ),
@@ -356,7 +401,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
     );
   }
 
-// Add shimmer loading for user header
+  // Add shimmer loading for user header
   Widget _buildUserHeaderShimmer() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -367,23 +412,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 100,
-                  height: 14,
-                  color: _lightGrey,
-                ),
+                Container(width: 100, height: 14, color: _lightGrey),
                 const SizedBox(height: 8),
-                Container(
-                  width: 150,
-                  height: 20,
-                  color: _lightGrey,
-                ),
+                Container(width: 150, height: 20, color: _lightGrey),
                 const SizedBox(height: 8),
-                Container(
-                  width: 120,
-                  height: 14,
-                  color: _lightGrey,
-                ),
+                Container(width: 120, height: 14, color: _lightGrey),
               ],
             ),
           ),
@@ -391,12 +424,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: _primaryGreen.withOpacity(0.3)),
+              border: Border.all(color: _primaryGreen.withValues(alpha: 0.3)),
             ),
-            child: CircleAvatar(
-              radius: 22,
-              backgroundColor: _lightGrey,
-            ),
+            child: CircleAvatar(radius: 22, backgroundColor: _lightGrey),
           ),
         ],
       ),
@@ -421,9 +451,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
             prefixIcon: Icon(Icons.search, color: _darkGrey),
             suffixIcon: _isSearching
                 ? IconButton(
-              icon: Icon(Icons.close, color: _darkGrey),
-              onPressed: _clearSearch,
-            )
+                    icon: Icon(Icons.close, color: _darkGrey),
+                    onPressed: _clearSearch,
+                  )
                 : null,
             border: InputBorder.none,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -450,7 +480,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: _primaryGreen,
                       borderRadius: BorderRadius.circular(20),
@@ -476,10 +509,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
                   const SizedBox(height: 8),
                   Text(
                     "Fresh and organic food delivered to your table",
-                    style: TextStyle(
-                      color: _darkGrey,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: _darkGrey, fontSize: 14),
                   ),
                 ],
               ),
@@ -502,7 +532,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   // 📌 SECTION HEADER
-  Widget _buildSectionHeader(String title, String action, {VoidCallback? onSeeAll}) {
+  Widget _buildSectionHeader(
+    String title,
+    String action, {
+    VoidCallback? onSeeAll,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
       child: Row(
@@ -539,7 +573,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SizedBox(
             height: 100,
-            child: Center(child: CircularProgressIndicator(color: _primaryGreen)),
+            child: Center(
+              child: CircularProgressIndicator(color: _primaryGreen),
+            ),
           );
         }
 
@@ -612,7 +648,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
           final item = bestsellers[index];
           return Container(
             width: 160,
-            margin: EdgeInsets.only(right: index == bestsellers.length - 1 ? 0 : 15),
+            margin: EdgeInsets.only(
+              right: index == bestsellers.length - 1 ? 0 : 15,
+            ),
             child: _buildProductCard(item),
           );
         },
@@ -628,10 +666,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
         // 1. Return a SliverToBoxAdapter with loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 20),
-                child: _buildProductCardShimmer(),
-              )
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: _buildProductCardShimmer(),
+            ),
           );
         }
 
@@ -651,13 +689,15 @@ class _HomeCustomerState extends State<HomeCustomer> {
             mainAxisSpacing: 15,
           ),
           delegate: SliverChildBuilderDelegate(
-                (context, index) {
+            (context, index) {
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: _buildProductCard(items[index]),
               );
             },
-            childCount: items.length > 4 ? 4 : items.length, // Limit to 4 or less
+            childCount: items.length > 4
+                ? 4
+                : items.length, // Limit to 4 or less
           ),
         );
       },
@@ -673,16 +713,13 @@ class _HomeCustomerState extends State<HomeCustomer> {
         crossAxisSpacing: 15,
         mainAxisSpacing: 15,
       ),
-      delegate: SliverChildBuilderDelegate(
-            (context, index) {
-          final item = items[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: _buildProductCard(item),
-          );
-        },
-        childCount: items.length,
-      ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final item = items[index];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: _buildProductCard(item),
+        );
+      }, childCount: items.length),
     );
   }
 
@@ -719,30 +756,37 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 ),
                 child: item.imageUrl != null
                     ? ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                  ),
-                  child: Image.network(
-                    item.imageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Center(
-                        child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                      );
-                    },
-                  ),
-                )
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(18),
+                          topRight: Radius.circular(18),
+                        ),
+                        child: Image.network(
+                          item.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Center(
+                              child: Icon(
+                                Icons.fastfood,
+                                color: _darkGrey,
+                                size: 40,
+                              ),
+                            );
+                          },
+                        ),
+                      )
                     : Center(
-                  child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                ),
+                        child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
+                      ),
               ),
               if (item.isBestseller)
                 Positioned(
                   top: 8,
                   left: 8,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: _primaryGreen,
                       borderRadius: BorderRadius.circular(8),
@@ -779,10 +823,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
                 const SizedBox(height: 4),
                 Text(
                   item.description ?? "Fresh and delicious",
-                  style: TextStyle(
-                    color: _darkGrey,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: _darkGrey, fontSize: 12),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),

@@ -37,14 +37,18 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
           .eq('is_available', true);
 
       setState(() {
-        _menuItems = response.map((item) => MenuItem(
-          id: item['id'] as String,
-          name: item['name'] as String,
-          description: item['description'] as String?,
-          price: (item['price'] as num).toDouble(),
-          imageUrl: item['image_url'] as String?,
-          categoryId: item['category_id'] as String,
-        )).toList();
+        _menuItems = response
+            .map(
+              (item) => MenuItem(
+                id: item['id'] as String,
+                name: item['name'] as String,
+                description: item['description'] as String?,
+                price: (item['price'] as num).toDouble(),
+                imageUrl: item['image_url'] as String?,
+                categoryId: item['category_id'] as String,
+              ),
+            )
+            .toList();
       });
     } catch (e) {
       debugPrint('Error loading menu items: $e');
@@ -67,39 +71,43 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
       final response = await _svc.client
           .from('group_sessions')
           .insert({
-        'establishment_id': widget.establishmentId,
-        'created_by': _svc.client.auth.currentUser?.id,
-        'status': 'active',
-      })
+            'establishment_id': widget.establishmentId,
+            'created_by': _svc.client.auth.currentUser?.id,
+            'status': 'active',
+          })
           .select()
           .single();
 
       setState(() => _sessionId = response['id'] as String);
 
       // Add creator as participant
-      await _svc.client
-          .from('group_session_participants')
-          .insert({
+      await _svc.client.from('group_session_participants').insert({
         'session_id': _sessionId,
         'user_id': _svc.client.auth.currentUser?.id,
         'joined_at': DateTime.now().toIso8601String(),
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Group session created successfully!'),
             backgroundColor: Colors.green,
-          )
-      );
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to create session: $e'),
             backgroundColor: Colors.red,
-          )
-      );
+          ),
+        );
+      }
     } finally {
-      setState(() => _creating = false);
+      if (mounted) {
+        setState(() => _creating = false);
+      }
     }
   }
 
@@ -109,17 +117,15 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
     setState(() => _loading = true);
     try {
       // Verify session exists and is active
-      final sessionResponse = await _svc.client
+      await _svc.client
           .from('group_sessions')
           .select()
-          .eq('id', sessionId) // Fixed: Removed unnecessary cast
+          .eq('id', sessionId)
           .eq('status', 'active')
           .single();
 
       // Add user as participant
-      await _svc.client
-          .from('group_session_participants')
-          .insert({
+      await _svc.client.from('group_session_participants').insert({
         'session_id': sessionId,
         'user_id': _svc.client.auth.currentUser?.id,
         'joined_at': DateTime.now().toIso8601String(),
@@ -130,22 +136,28 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
       // Load existing participants
       await _loadParticipants(sessionId);
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Joined session successfully!'),
             backgroundColor: Colors.green,
-          )
-      );
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to join session: $e'),
             backgroundColor: Colors.red,
-          )
-      );
+          ),
+        );
+      }
     } finally {
-      setState(() => _loading = false);
-      _joinSessionController.clear();
+      if (mounted) {
+        setState(() => _loading = false);
+        _joinSessionController.clear();
+      }
     }
   }
 
@@ -156,15 +168,17 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
           .select('user_id, users(email)')
           .eq('session_id', sessionId);
 
-      setState(() {
-        _participants.clear();
-        for (final participant in response) {
-          final userId = participant['user_id'] as String;
-          final userData = participant['users'] as Map<String, dynamic>;
-          final email = userData['email'] as String;
-          _participants[userId] = email.split('@').first;
-        }
-      });
+      if (mounted) {
+        setState(() {
+          _participants.clear();
+          for (final participant in response) {
+            final userId = participant['user_id'] as String;
+            final userData = participant['users'] as Map<String, dynamic>;
+            final email = userData['email'] as String;
+            _participants[userId] = email.split('@').first;
+          }
+        });
+      }
     } catch (e) {
       debugPrint('Error loading participants: $e');
     }
@@ -178,10 +192,7 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
           quantity: _localCart[menuItem.id]!.quantity + 1,
         );
       } else {
-        _localCart[menuItem.id] = CartItem(
-          menuItem: menuItem,
-          quantity: 1,
-        );
+        _localCart[menuItem.id] = CartItem(menuItem: menuItem, quantity: 1);
       }
     });
 
@@ -222,11 +233,13 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
       }
     }
 
-    setState(() {
-      _sessionId = null;
-      _localCart.clear();
-      _participants.clear();
-    });
+    if (mounted) {
+      setState(() {
+        _sessionId = null;
+        _localCart.clear();
+        _participants.clear();
+      });
+    }
 
     _loadCurrentUser(); // Reload current user
   }
@@ -234,10 +247,10 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
   Future<void> _submitGroupOrder() async {
     if (_localCart.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Your cart is empty'),
-            backgroundColor: Colors.orange,
-          )
+        const SnackBar(
+          content: Text('Your cart is empty'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
@@ -248,14 +261,14 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
       final orderResponse = await _svc.client
           .from('orders')
           .insert({
-        'establishment_id': widget.establishmentId,
-        'table_id': 'group-order',
-        'customer_id': _svc.client.auth.currentUser?.id,
-        'status': 'pending',
-        'total_amount': _calculateTotal(),
-        'special_instructions': 'Group order from session $_sessionId',
-        'group_session_id': _sessionId,
-      })
+            'establishment_id': widget.establishmentId,
+            'table_id': 'group-order',
+            'customer_id': _svc.client.auth.currentUser?.id,
+            'status': 'pending',
+            'total_amount': _calculateTotal(),
+            'special_instructions': 'Group order from session $_sessionId',
+            'group_session_id': _sessionId,
+          })
           .select()
           .single();
 
@@ -273,36 +286,40 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
         };
       }).toList();
 
-      await _svc.client
-          .from('order_items')
-          .insert(orderItems);
+      await _svc.client.from('order_items').insert(orderItems);
 
       // Clear local cart
-      setState(() => _localCart.clear());
+      if (mounted) {
+        setState(() => _localCart.clear());
 
-      ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Group order #${orderId.substring(0, 8)} submitted!'),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 3),
-          )
-      );
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to submit order: $e'),
             backgroundColor: Colors.red,
-          )
-      );
+          ),
+        );
+      }
     } finally {
-      setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   double _calculateTotal() {
     return _localCart.values.fold(
-        0,
-            (total, item) => total + (item.menuItem.price * item.quantity)
+      0,
+      (total, item) => total + (item.menuItem.price * item.quantity),
     );
   }
 
@@ -339,27 +356,17 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.group,
-            size: 80,
-            color: Color(0xFF53B175),
-          ),
+          const Icon(Icons.group, size: 80, color: Color(0xFF53B175)),
           const SizedBox(height: 20),
           const Text(
             'Group Order',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
             'Start a group order or join an existing one',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.grey,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.grey),
           ),
           const SizedBox(height: 40),
           SizedBox(
@@ -368,10 +375,10 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
             child: ElevatedButton.icon(
               icon: _creating
                   ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Icon(Icons.group_add),
               label: Text(_creating ? 'Creating...' : 'Start Group Order'),
               onPressed: _creating ? null : _createSession,
@@ -409,7 +416,9 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
             width: double.infinity,
             height: 56,
             child: ElevatedButton(
-              onPressed: _loading ? null : () => _joinSession(_joinSessionController.text),
+              onPressed: _loading
+                  ? null
+                  : () => _joinSession(_joinSessionController.text),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -419,10 +428,10 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
               ),
               child: _loading
                   ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('Join Session'),
             ),
           ),
@@ -475,7 +484,9 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
                     children: _participants.entries.map((entry) {
                       return Chip(
                         label: Text(entry.value),
-                        backgroundColor: const Color(0xFF53B175).withValues(alpha: 0.1),
+                        backgroundColor: const Color(
+                          0xFF53B175,
+                        ).withValues(alpha: 0.1),
                       );
                     }).toList(),
                   ),
@@ -508,35 +519,40 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
                         child: _menuItems.isEmpty
                             ? const Center(child: CircularProgressIndicator())
                             : ListView.builder(
-                          itemCount: _menuItems.length,
-                          itemBuilder: (context, index) {
-                            final item = _menuItems[index];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: ListTile(
-                                leading: item.imageUrl != null
-                                    ? CircleAvatar(
-                                  backgroundImage: NetworkImage(item.imageUrl!),
-                                )
-                                    : const CircleAvatar(
-                                  child: Icon(Icons.fastfood),
-                                ),
-                                title: Text(item.name),
-                                subtitle: Text(
-                                  'MWK ${item.price.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF53B175),
-                                  ),
-                                ),
-                                trailing: IconButton(
-                                  icon: const Icon(Icons.add, color: Color(0xFF53B175)),
-                                  onPressed: () => _addItem(item),
-                                ),
+                                itemCount: _menuItems.length,
+                                itemBuilder: (context, index) {
+                                  final item = _menuItems[index];
+                                  return Card(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    child: ListTile(
+                                      leading: item.imageUrl != null
+                                          ? CircleAvatar(
+                                              backgroundImage: NetworkImage(
+                                                item.imageUrl!,
+                                              ),
+                                            )
+                                          : const CircleAvatar(
+                                              child: Icon(Icons.fastfood),
+                                            ),
+                                      title: Text(item.name),
+                                      subtitle: Text(
+                                        'MWK ${item.price.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF53B175),
+                                        ),
+                                      ),
+                                      trailing: IconButton(
+                                        icon: const Icon(
+                                          Icons.add,
+                                          color: Color(0xFF53B175),
+                                        ),
+                                        onPressed: () => _addItem(item),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
                       ),
                     ],
                   ),
@@ -564,43 +580,49 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
                           Expanded(
                             child: _localCart.isEmpty
                                 ? const Center(
-                              child: Text(
-                                'No items added yet',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
-                                : ListView(
-                              children: _localCart.entries.map((entry) {
-                                final cartItem = entry.value;
-                                return ListTile(
-                                  dense: true,
-                                  leading: CircleAvatar(
-                                    radius: 12,
-                                    backgroundColor: const Color(0xFF53B175),
                                     child: Text(
-                                      '${cartItem.quantity}',
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      'No items added yet',
+                                      style: TextStyle(color: Colors.grey),
                                     ),
+                                  )
+                                : ListView(
+                                    children: _localCart.entries.map((entry) {
+                                      final cartItem = entry.value;
+                                      return ListTile(
+                                        dense: true,
+                                        leading: CircleAvatar(
+                                          radius: 12,
+                                          backgroundColor: const Color(
+                                            0xFF53B175,
+                                          ),
+                                          child: Text(
+                                            '${cartItem.quantity}',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        title: Text(
+                                          cartItem.menuItem.name,
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                        subtitle: Text(
+                                          'MWK ${(cartItem.menuItem.price * cartItem.quantity).toStringAsFixed(0)}',
+                                          style: const TextStyle(fontSize: 12),
+                                        ),
+                                        trailing: IconButton(
+                                          icon: const Icon(
+                                            Icons.remove,
+                                            size: 16,
+                                          ),
+                                          onPressed: () =>
+                                              _removeItem(cartItem.menuItem.id),
+                                        ),
+                                      );
+                                    }).toList(),
                                   ),
-                                  title: Text(
-                                    cartItem.menuItem.name,
-                                    style: const TextStyle(fontSize: 14),
-                                  ),
-                                  subtitle: Text(
-                                    'MWK ${(cartItem.menuItem.price * cartItem.quantity).toStringAsFixed(0)}',
-                                    style: const TextStyle(fontSize: 12),
-                                  ),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.remove, size: 16),
-                                    onPressed: () => _removeItem(cartItem.menuItem.id),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
                           ),
                           const Divider(),
                           Row(
@@ -637,10 +659,12 @@ class _GroupOrderScreenState extends State<GroupOrderScreen> {
                               ),
                               child: _loading
                                   ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
                                   : const Text('Submit Group Order'),
                             ),
                           ),

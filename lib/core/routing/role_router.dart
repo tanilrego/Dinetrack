@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../flavors/customer/screens/customer_navigation.dart';
+import '../../landing_page.dart';
 import '../services/auth_service.dart';
 //import '../../flavors/customer/screens/home_customer.dart';
 import '../../flavors/operator/screens/home_operator.dart';
@@ -38,20 +38,18 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     switch (_userRole) {
       case 'customer':
-        return CustomerNavigation(establishmentId: establishmntId);
+        return const LandingPage(); // Allow customers to select restaurant
       case 'operator':
         return OperatorHomeScreen();
       case 'kitchen':
         return KitchenStaffScreen();
       case 'supervisor':
-        return SupervisorHomeScreen();
+        return SupervisorPage();
       default:
         return Scaffold(
           body: Center(

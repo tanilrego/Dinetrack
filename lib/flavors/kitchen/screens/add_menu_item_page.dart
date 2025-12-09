@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:dinetrack/core/services/supabase_service.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../../../core/services/supabase_service.dart';
 
 class AddMenuItemPage extends StatefulWidget {
   final String establishmentId;
@@ -8,32 +9,36 @@ class AddMenuItemPage extends StatefulWidget {
   final VoidCallback? onMenuItemAdded;
 
   const AddMenuItemPage({
-    Key? key,
+    super.key,
     required this.establishmentId,
     required this.isDarkMode,
     this.onMenuItemAdded,
-  }) : super(key: key);
+  });
 
   @override
-  _AddMenuItemPageState createState() => _AddMenuItemPageState();
+  State<AddMenuItemPage> createState() => _AddMenuItemPageState();
 }
 
 class _AddMenuItemPageState extends State<AddMenuItemPage> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _preparationTimeController = TextEditingController();
-  final _imageUrlController = TextEditingController();
+  final _supabase = Supabase.instance.client;
+  bool _isLoading = false;
 
-  String? _selectedCategoryId;
+  final TextEditingController _nameCtrl = TextEditingController();
+  final TextEditingController _descCtrl = TextEditingController();
+  final TextEditingController _priceCtrl = TextEditingController();
+  // final TextEditingController _imageUrlCtrl = TextEditingController(); // Replaced with picker
+  final TextEditingController _prepTimeCtrl = TextEditingController();
+
+  String? _categoryId;
   List<Map<String, dynamic>> _categories = [];
+
   bool _isAvailable = true;
   bool _isBestseller = false;
   bool _isRecommended = false;
-  bool _isLoading = false;
-  bool _isLoadingCategories = true;
-  final SupabaseClient _supabase = Supabase.instance.client;
+
+  String? _uploadedImageUrl;
+  bool _isUploadingImage = false;
 
   @override
   void initState() {
@@ -43,581 +48,405 @@ class _AddMenuItemPageState extends State<AddMenuItemPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _descriptionController.dispose();
-    _priceController.dispose();
-    _preparationTimeController.dispose();
-    _imageUrlController.dispose();
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _priceCtrl.dispose();
+    // _imageUrlCtrl.dispose();
+    _prepTimeCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _loadCategories() async {
     try {
-      // First, check if we have an establishment ID
-      if (widget.establishmentId.isEmpty) {
-        print('No establishment ID provided');
-        setState(() {
-          _isLoadingCategories = false;
-        });
-        return;
-      }
-      print('Loading categories for establishment: ${widget.establishmentId}');
+      // Use the global query based on the new schema (no establishment_id on categories)
       final response = await _supabase
           .from('menu_categories')
           .select('id, name')
-          .eq('establishment_id', widget.establishmentId)
           .eq('is_active', true)
-          .order('display_order');
+          .order('name');
 
-      print('Categories loaded: ${response.length}');
+      if (mounted) {
+        setState(() {
+          _categories = List<Map<String, dynamic>>.from(response);
+          if (_categories.isNotEmpty) {
+            _categoryId = _categories[0]['id'];
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading categories: $e')));
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+      if (pickedFile == null) return;
 
       setState(() {
-        _categories = List<Map<String, dynamic>>.from(response);
-        if (_categories.isNotEmpty) {
-          _selectedCategoryId = _categories[0]['id'];
-          print('Selected first category: ${_categories[0]['name']}');
-        } else {
-          print('No categories found for this establishment');
+        _isUploadingImage = true;
+      });
+
+      final bytes = await pickedFile.readAsBytes();
+      final url = await SupabaseService().uploadMenuItemImage(
+        bytes,
+        pickedFile.name,
+      );
+
+      if (mounted) {
+        setState(() {
+          _uploadedImageUrl = url;
+          _isUploadingImage = false;
+        });
+
+        if (url == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to upload image'),
+              backgroundColor: Colors.red,
+            ),
+          );
         }
-        _isLoadingCategories = false;
-      });
-    } on PostgrestException catch (error) {
-      print('Postgrest error loading categories: ${error.message}');
-      print('Details: ${error.details}');
-      setState(() {
-        _isLoadingCategories = false;
-      });
-
-      // Show error to user
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUploadingImage = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error loading categories: ${error.message}'),
+            content: Text('Error uploading image: $e'),
             backgroundColor: Colors.red,
           ),
         );
-      });
-    } catch (error) {
-      print('Error loading categories: $error');
-      setState(() {
-        _isLoadingCategories = false;
-      });
+      }
     }
   }
 
   Future<void> _addMenuItem() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedCategoryId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a category'),
-          backgroundColor: Colors.red,
-        ),
-      );
+    if (_categoryId == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a category')));
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      print('Adding menu item with category: $_selectedCategoryId');
+      final price = double.tryParse(_priceCtrl.text) ?? 0.0;
+      final prepTime = int.tryParse(_prepTimeCtrl.text);
 
-      final response = await _supabase
-          .from('menu_items')
-          .insert({
-        'category_id': _selectedCategoryId,
-        'name': _nameController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'price': double.parse(_priceController.text.trim()),
-        'image_url': _imageUrlController.text.trim().isNotEmpty
-            ? _imageUrlController.text.trim()
-            : null,
+      await _supabase.from('menu_items').insert({
+        'establishment_id': widget.establishmentId,
+        'category_id': _categoryId,
+        'name': _nameCtrl.text.trim(),
+        'description': _descCtrl.text.trim(),
+        'price': price,
+        'image_url':
+            _uploadedImageUrl ??
+            '', // Use uploaded URL, defaults to empty string if null
+        'preparation_time': prepTime,
         'is_available': _isAvailable,
-        'preparation_time': int.tryParse(_preparationTimeController.text.trim()) ?? 10,
         'is_bestseller': _isBestseller,
         'is_recommended': _isRecommended,
-        'rating': 0.0, // Default rating
         'created_at': DateTime.now().toIso8601String(),
-        'updated_at': DateTime.now().toIso8601String(),
-      })
-          .select();
+      });
 
-      if (response.isNotEmpty) {
+      if (mounted) {
         // Clear form
-        _formKey.currentState!.reset();
-        _nameController.clear();
-        _descriptionController.clear();
-        _priceController.clear();
-        _preparationTimeController.clear();
-        _imageUrlController.clear();
-
-        // Reset toggles
+        _nameCtrl.clear();
+        _descCtrl.clear();
+        _priceCtrl.clear();
+        _prepTimeCtrl.clear();
         setState(() {
+          _uploadedImageUrl = null;
           _isAvailable = true;
           _isBestseller = false;
           _isRecommended = false;
         });
 
-        // Show success message
+        widget.onMenuItemAdded?.call();
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Menu item added successfully!'),
-            backgroundColor: Colors.green,
+          SnackBar(
+            content: Text('Error adding menu item: $e'),
+            backgroundColor: Colors.red,
           ),
         );
-
-        // Call callback if provided
-        if (widget.onMenuItemAdded != null) {
-          widget.onMenuItemAdded!();
-        }
       }
-    } on PostgrestException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Database error: ${e.message}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to add menu item: $error'),
-          backgroundColor: Colors.red,
-        ),
-      );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDarkMode = widget.isDarkMode;
+    // Colors
+    final textColor = widget.isDarkMode ? Colors.white : Colors.black87;
+    final inputFill = widget.isDarkMode
+        ? const Color(0xFF2A2A2A)
+        : Colors.grey.shade100;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Text(
-              'DINETRACK',
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Add New Menu Item',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 24,
                 fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black,
+                color: textColor,
               ),
             ),
-          ),
-          const SizedBox(height: 32),
+            const SizedBox(height: 24),
 
-          // Title
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Center(
-              child: Text(
-                'Add New Menu Item',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: isDarkMode ? Colors.black : Colors.black,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Add Menu Item Form
-          Card(
-            color: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-            elevation: 2,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Menu Item Details',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Category Selection
-                    if (_isLoadingCategories)
-                      const Center(child: CircularProgressIndicator())
-                    else if (_categories.isEmpty)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'No categories found. Please create categories first.',
-                          style: TextStyle(color: Colors.orange),
-                        ),
-                      )
-                    else
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Category',
-                            style: TextStyle(
-                              color: isDarkMode ? Colors.white : Colors.black,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  value: _selectedCategoryId,
-                                  isExpanded: true,
-                                  style: TextStyle(
-                                    color: isDarkMode ? Colors.white : Colors.black,
-                                  ),
-                                  dropdownColor: isDarkMode ? const Color(0xFF2A2A2A) : Colors.white,
-                                  onChanged: (String? newValue) {
-                                    setState(() {
-                                      _selectedCategoryId = newValue;
-                                    });
-                                  },
-                                  items: _categories.map<DropdownMenuItem<String>>((category) {
-                                    return DropdownMenuItem<String>(
-                                      value: category['id'],
-                                      child: Text(category['name'] ?? 'Unnamed Category'),
-                                    );
-                                  }).toList(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    const SizedBox(height: 16),
-
-                    // Name
-                    TextFormField(
-                      controller: _nameController,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Item Name',
-                        labelStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade400 : null,
-                        ),
-                        border: const OutlineInputBorder(),
-                        hintText: 'e.g., Grilled Salmon, Chocolate Cake',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade500 : null,
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter item name';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Description
-                    TextFormField(
-                      controller: _descriptionController,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: 'Description',
-                        labelStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade400 : null,
-                        ),
-                        border: const OutlineInputBorder(),
-                        hintText: 'Describe the menu item...',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade500 : null,
-                        ),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter description';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Price
-                    TextFormField(
-                      controller: _priceController,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Price',
-                        labelStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade400 : null,
-                        ),
-                        border: const OutlineInputBorder(),
-                        hintText: 'e.g., 5000.00',
-                        suffixText: 'MWK',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade500 : null,
-                        ),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter price';
-                        }
-                        final price = double.tryParse(value);
-                        if (price == null || price <= 0) {
-                          return 'Please enter a valid price';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Preparation Time
-                    TextFormField(
-                      controller: _preparationTimeController,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Preparation Time',
-                        labelStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade400 : null,
-                        ),
-                        border: const OutlineInputBorder(),
-                        hintText: 'e.g., 15',
-                        suffixText: 'minutes',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade500 : null,
-                        ),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter preparation time';
-                        }
-                        final time = int.tryParse(value);
-                        if (time == null || time <= 0) {
-                          return 'Please enter valid time in minutes';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Image URL (Optional)
-                    TextFormField(
-                      controller: _imageUrlController,
-                      style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'Image URL (Optional)',
-                        labelStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade400 : null,
-                        ),
-                        border: const OutlineInputBorder(),
-                        hintText: 'https://example.com/image.jpg',
-                        hintStyle: TextStyle(
-                          color: isDarkMode ? Colors.grey.shade500 : null,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Toggle Switches
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Item Settings',
-                          style: TextStyle(
-                            color: isDarkMode ? Colors.white : Colors.black,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Available
-                        Row(
-                          children: [
-                            Switch(
-                              value: _isAvailable,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isAvailable = value;
-                                });
-                              },
-                              activeColor: Colors.green,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Available',
-                              style: TextStyle(
-                                color: isDarkMode ? Colors.white : Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Bestseller
-                        Row(
-                          children: [
-                            Switch(
-                              value: _isBestseller,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isBestseller = value;
-                                });
-                              },
-                              activeColor: Colors.orange,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Mark as Bestseller',
-                              style: TextStyle(
-                                color: isDarkMode ? Colors.white : Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        // Recommended
-                        Row(
-                          children: [
-                            Switch(
-                              value: _isRecommended,
-                              onChanged: (value) {
-                                setState(() {
-                                  _isRecommended = value;
-                                });
-                              },
-                              activeColor: Colors.blue,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Mark as Recommended',
-                              style: TextStyle(
-                                color: isDarkMode ? Colors.white : Colors.black,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Add Button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _addMenuItem,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF2563EB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        icon: _isLoading
-                            ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+            // 1. Image Picker
+            GestureDetector(
+              onTap: _pickImage,
+              child: Container(
+                width: double.infinity,
+                height: 200,
+                decoration: BoxDecoration(
+                  color: inputFill,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.grey.shade400,
+                    style: BorderStyle.solid,
+                  ),
+                  image: _uploadedImageUrl != null
+                      ? DecorationImage(
+                          image: NetworkImage(_uploadedImageUrl!),
+                          fit: BoxFit.cover,
                         )
-                            : const Icon(Icons.add),
-                        label: Text(
-                          _isLoading ? 'Adding...' : 'Add Menu Item',
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                      ),
-                    ),
+                      : null,
+                ),
+                child: _isUploadingImage
+                    ? const Center(child: CircularProgressIndicator())
+                    : (_uploadedImageUrl == null
+                          ? Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.add_a_photo,
+                                  size: 48,
+                                  color: Colors.grey.shade600,
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Tap to add image',
+                                  style: TextStyle(color: Colors.grey.shade600),
+                                ),
+                              ],
+                            )
+                          : null), // Image already shown in decoration
+              ),
+            ),
+            const SizedBox(height: 24),
 
-                    // Sample Image URLs for testing
-                    const SizedBox(height: 20),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
+            // 2. Basic Info
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    controller: _nameCtrl,
+                    label: 'Item Name',
+                    icon: Icons.fastfood,
+                    textColor: textColor,
+                    fillColor: inputFill,
+                    validator: (v) => v!.isEmpty ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _buildTextField(
+                    controller: _priceCtrl,
+                    label: 'Price (MWK)',
+                    icon: Icons.attach_money,
+                    textColor: textColor,
+                    fillColor: inputFill,
+                    keyboardType: TextInputType.number,
+                    validator: (v) {
+                      if (v!.isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid price';
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            // 3. Category Dropdown
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: inputFill,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _categoryId,
+                  hint: Text(
+                    'Select Category',
+                    style: TextStyle(color: textColor),
+                  ),
+                  isExpanded: true,
+                  dropdownColor: widget.isDarkMode
+                      ? const Color(0xFF333333)
+                      : Colors.white,
+                  items: _categories.map((cat) {
+                    return DropdownMenuItem<String>(
+                      value: cat['id'],
+                      child: Text(
+                        cat['name'],
+                        style: TextStyle(color: textColor),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Sample Image URLs:',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: isDarkMode ? Colors.white : Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '• Juice: https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=400',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade700,
-                            ),
-                          ),
-                          Text(
-                            '• Pasta: https://images.unsplash.com/photo-1563379926898-05f4575a45d8?w=400',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade700,
-                            ),
-                          ),
-                          Text(
-                            '• Cake: https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=400',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _categoryId = val),
+                  style: TextStyle(color: textColor, fontSize: 16),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 24),
-        ],
+
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _descCtrl,
+              label: 'Description',
+              icon: Icons.description,
+              textColor: textColor,
+              fillColor: inputFill,
+              maxLines: 3,
+            ),
+
+            const SizedBox(height: 16),
+            _buildTextField(
+              controller: _prepTimeCtrl,
+              label: 'Prep Time (mins)',
+              icon: Icons.timer,
+              textColor: textColor,
+              fillColor: inputFill,
+              keyboardType: TextInputType.number,
+            ),
+
+            const SizedBox(height: 24),
+
+            // 4. Switches
+            _buildSwitch(
+              'Available',
+              _isAvailable,
+              (val) => setState(() => _isAvailable = val),
+              textColor,
+            ),
+            _buildSwitch(
+              'Bestseller',
+              _isBestseller,
+              (val) => setState(() => _isBestseller = val),
+              textColor,
+            ),
+            _buildSwitch(
+              'Recommended',
+              _isRecommended,
+              (val) => setState(() => _isRecommended = val),
+              textColor,
+            ),
+
+            const SizedBox(height: 32),
+
+            // 5. Submit Button
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _isLoading ? null : _addMenuItem,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: _isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : const Text(
+                        'Add Menu Item',
+                        style: TextStyle(fontSize: 16),
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required Color textColor,
+    required Color fillColor,
+    TextInputType? keyboardType,
+    int maxLines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      maxLines: maxLines,
+      style: TextStyle(color: textColor),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.grey.shade600),
+        prefixIcon: Icon(icon, color: Colors.grey.shade600),
+        filled: true,
+        fillColor: fillColor,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+      ),
+      validator: validator,
+    );
+  }
+
+  Widget _buildSwitch(
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged,
+    Color textColor,
+  ) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            color: textColor,
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: const Color(0xFF2563EB),
+        ),
+      ],
     );
   }
 }

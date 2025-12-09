@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
 
+
   # Core dependencies
   cupertino_icons: ^1.0.6
 
@@ -54,6 +55,11 @@ dependencies:
   # URL handling
   url_launcher: ^6.2.0
 
+  # Payment Processing
+  paychangu_flutter: ^0.0.3
+  webview_flutter: ^4.11.2
+  uuid: ^4.5.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -81,3 +87,4 @@ flutter:
   assets:
     - assets/env/.env.production
     - assets/images/logo.png
+    - assets/images/dyn.jpg

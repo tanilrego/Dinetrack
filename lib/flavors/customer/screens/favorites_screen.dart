@@ -5,10 +5,7 @@ import '../../../../core/models/menu_models.dart';
 class FavoritesScreen extends StatefulWidget {
   final Function(MenuItem, {int quantity}) onAddToCart;
 
-  const FavoritesScreen({
-    super.key,
-    required this.onAddToCart,
-  });
+  const FavoritesScreen({super.key, required this.onAddToCart});
 
   @override
   State<FavoritesScreen> createState() => _FavoritesScreenState();
@@ -50,7 +47,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       });
     } catch (e) {
       setState(() => _loading = false);
-      print('Error loading favorites: $e');
+      // print('Error loading favorites: $e');
     }
   }
 
@@ -61,9 +58,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       if (query.isEmpty) {
         _filteredFavorites = _favorites;
       } else {
-        _filteredFavorites = _favorites.where((item) =>
-        item.name.toLowerCase().contains(query) ||
-            (item.description?.toLowerCase().contains(query) ?? false)).toList();
+        _filteredFavorites = _favorites
+            .where(
+              (item) =>
+                  item.name.toLowerCase().contains(query) ||
+                  (item.description?.toLowerCase().contains(query) ?? false),
+            )
+            .toList();
       }
     });
   }
@@ -81,7 +82,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove from Favorites'),
-        content: Text('Are you sure you want to remove "${item.name}" from favorites?'),
+        content: Text(
+          'Are you sure you want to remove "${item.name}" from favorites?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -89,10 +92,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -105,26 +105,37 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           _favorites.removeWhere((favorite) => favorite.id == item.id);
           _filteredFavorites = _searchQuery.isEmpty
               ? _favorites
-              : _favorites.where((item) =>
-          item.name.toLowerCase().contains(_searchQuery) ||
-              (item.description?.toLowerCase().contains(_searchQuery) ?? false)).toList();
+              : _favorites
+                    .where(
+                      (item) =>
+                          item.name.toLowerCase().contains(_searchQuery) ||
+                          (item.description?.toLowerCase().contains(
+                                _searchQuery,
+                              ) ??
+                              false),
+                    )
+                    .toList();
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Removed ${item.name} from favorites'),
-            backgroundColor: _primaryGreen,
-            duration: const Duration(seconds: 2),
-          ),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Removed ${item.name} from favorites'),
+              backgroundColor: _primaryGreen,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
       } catch (e) {
-        print('Error removing from favorites: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to remove from favorites'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // print('Error removing from favorites: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to remove from favorites'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }
@@ -146,10 +157,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         centerTitle: true,
         title: const Text(
           'My Favorites',
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       body: Column(
@@ -171,9 +179,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   prefixIcon: Icon(Icons.search, color: _darkGrey),
                   suffixIcon: _searchQuery.isNotEmpty
                       ? IconButton(
-                    icon: Icon(Icons.close, color: _darkGrey),
-                    onPressed: _clearSearch,
-                  )
+                          icon: Icon(Icons.close, color: _darkGrey),
+                          onPressed: _clearSearch,
+                        )
                       : null,
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -186,32 +194,31 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           Expanded(
             child: _loading
                 ? const Center(
-              child: CircularProgressIndicator(
-                color: Color(0xFF53B175),
-              ),
-            )
+                    child: CircularProgressIndicator(color: Color(0xFF53B175)),
+                  )
                 : _filteredFavorites.isEmpty
                 ? _buildEmptyState()
                 : RefreshIndicator(
-              onRefresh: () async {
-                _refreshFavorites();
-                await Future.delayed(const Duration(seconds: 1));
-              },
-              child: GridView.builder(
-                padding: const EdgeInsets.all(20),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.75,
-                  crossAxisSpacing: 15,
-                  mainAxisSpacing: 15,
-                ),
-                itemCount: _filteredFavorites.length,
-                itemBuilder: (context, index) {
-                  final item = _filteredFavorites[index];
-                  return _buildFavoriteCard(item);
-                },
-              ),
-            ),
+                    onRefresh: () async {
+                      _refreshFavorites();
+                      await Future.delayed(const Duration(seconds: 1));
+                    },
+                    child: GridView.builder(
+                      padding: const EdgeInsets.all(20),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.75,
+                            crossAxisSpacing: 15,
+                            mainAxisSpacing: 15,
+                          ),
+                      itemCount: _filteredFavorites.length,
+                      itemBuilder: (context, index) {
+                        final item = _filteredFavorites[index];
+                        return _buildFavoriteCard(item);
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
@@ -242,19 +249,14 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             _searchQuery.isNotEmpty
                 ? 'Try a different search term'
                 : 'Start adding items to your favorites!',
-            style: TextStyle(
-              color: _darkGrey,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: _darkGrey, fontSize: 14),
             textAlign: TextAlign.center,
           ),
           if (_searchQuery.isNotEmpty) ...[
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _clearSearch,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryGreen,
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: _primaryGreen),
               child: const Text(
                 'Clear Search',
                 style: TextStyle(color: Colors.white),
@@ -275,7 +277,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -299,23 +301,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 ),
                 child: item.imageUrl != null
                     ? ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
-                  ),
-                  child: Image.network(
-                    item.imageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Center(
-                        child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                      );
-                    },
-                  ),
-                )
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(18),
+                          topRight: Radius.circular(18),
+                        ),
+                        child: Image.network(
+                          item.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Center(
+                              child: Icon(
+                                Icons.fastfood,
+                                color: _darkGrey,
+                                size: 40,
+                              ),
+                            );
+                          },
+                        ),
+                      )
                     : Center(
-                  child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                ),
+                        child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
+                      ),
               ),
 
               // PRODUCT DETAILS
@@ -337,10 +343,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     const SizedBox(height: 4),
                     Text(
                       item.description ?? "Fresh and delicious",
-                      style: TextStyle(
-                        color: _darkGrey,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: _darkGrey, fontSize: 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -360,7 +363,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                           width: 30,
                           height: 30,
                           child: ElevatedButton(
-                            onPressed: () => widget.onAddToCart(item, quantity: 1),
+                            onPressed: () =>
+                                widget.onAddToCart(item, quantity: 1),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: _primaryGreen,
                               padding: EdgeInsets.zero,
@@ -393,11 +397,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 color: Colors.red,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.favorite,
-                color: Colors.white,
-                size: 16,
-              ),
+              child: const Icon(Icons.favorite, color: Colors.white, size: 16),
             ),
           ),
 
@@ -415,17 +415,13 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha:0.1),
+                      color: Colors.black.withValues(alpha: 0.1),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
                   ],
                 ),
-                child: Icon(
-                  Icons.close,
-                  color: _darkGrey,
-                  size: 18,
-                ),
+                child: Icon(Icons.close, color: _darkGrey, size: 18),
               ),
             ),
           ),

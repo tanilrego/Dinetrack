@@ -3,6 +3,7 @@ import 'home_customer.dart';
 import 'favorites_screen.dart';
 import 'cart_screen.dart';
 import 'profile_screen.dart';
+import '../../../../core/widgets/paychangu_checkout.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
 
@@ -29,8 +30,8 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   final Map<String, CartItem> _cartItems = {};
   double _cartTotal = 0.0;
 
-  int get _cartItemCount => _cartItems.values
-      .fold(0, (count, item) => count + item.quantity);
+  int get _cartItemCount =>
+      _cartItems.values.fold(0, (count, item) => count + item.quantity);
 
   @override
   void initState() {
@@ -42,8 +43,10 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   // Calculate cart total
   void _calculateCartTotal() {
     setState(() {
-      _cartTotal = _cartItems.values
-          .fold(0, (total, item) => total + (item.menuItem.price * item.quantity));
+      _cartTotal = _cartItems.values.fold(
+        0,
+        (total, item) => total + (item.menuItem.price * item.quantity),
+      );
     });
   }
 
@@ -84,13 +87,19 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   }
 
   // Add to cart functionality
-  void _addToCart(MenuItem menuItem, {int quantity = 1, String? specialInstructions}) {
+  void _addToCart(
+    MenuItem menuItem, {
+    int quantity = 1,
+    String? specialInstructions,
+  }) {
     setState(() {
       if (_cartItems.containsKey(menuItem.id)) {
         _cartItems[menuItem.id] = CartItem(
           menuItem: menuItem,
           quantity: _cartItems[menuItem.id]!.quantity + quantity,
-          specialInstructions: specialInstructions ?? _cartItems[menuItem.id]!.specialInstructions,
+          specialInstructions:
+              specialInstructions ??
+              _cartItems[menuItem.id]!.specialInstructions,
         );
       } else {
         _cartItems[menuItem.id] = CartItem(
@@ -143,13 +152,18 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     });
   }
 
-  // Enhanced checkout method with DineCoins support
-  Future<void> _checkout({String paymentMethod = 'cash', double dineCoinsUsed = 0.0}) async {
+  // Enhanced checkout method with PayChangu support
+  Future<void> _checkout({
+    String paymentMethod = 'cash',
+    double dineCoinsUsed = 0.0,
+  }) async {
     if (_resolvedTableId == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Unable to determine table. Please scan QR code again.'),
+            content: Text(
+              'Unable to determine table. Please scan QR code again.',
+            ),
             backgroundColor: Colors.red,
           ),
         );
@@ -175,17 +189,37 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
           ? _cartTotal - dineCoinsUsed
           : _cartTotal;
 
+      // 0. Get table number from tables table
+      int? tableNumber;
+      if (_resolvedTableId != null) {
+        try {
+          final tableData = await _supabaseService.client
+              .from('tables')
+              .select('table_number')
+              .eq('id', _resolvedTableId!)
+              .maybeSingle();
+
+          tableNumber = tableData?['table_number'];
+          print(
+            'DEBUG: Fetched table_number: $tableNumber for table_id: $_resolvedTableId',
+          );
+        } catch (e) {
+          print('DEBUG: Could not fetch table number: $e');
+        }
+      }
+
       // 1. Create the order
       final orderResponse = await _supabaseService.client
           .from('orders')
           .insert({
-        'establishment_id': widget.establishmentId,
-        'table_id': _resolvedTableId,
-        'customer_id': _supabaseService.client.auth.currentUser?.id,
-        'status': 'pending',
-        'total_amount': _cartTotal, // Original total
-        'special_instructions': _getSpecialInstructions(),
-      })
+            'establishment_id': widget.establishmentId,
+            'table_id': _resolvedTableId,
+            'customer_id': _supabaseService.client.auth.currentUser?.id,
+            'status': 'pending',
+            'total_amount': _cartTotal, // Original total
+            'special_instructions': _getSpecialInstructions(),
+            'table_no': tableNumber, // Supabase handles null values
+          })
           .select()
           .single();
 
@@ -204,26 +238,68 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         };
       }).toList();
 
-      await _supabaseService.client
-          .from('order_items')
-          .insert(orderItems);
+      await _supabaseService.client.from('order_items').insert(orderItems);
 
-      // 3. Create payment record
-      await _supabaseService.client
-          .from('payments')
-          .insert({
+      // Handle PayChangu payment flow
+      if (paymentMethod == 'paychangu') {
+        // Generate unique transaction reference
+        final txRef =
+            'dinetrack-$orderId-${DateTime.now().millisecondsSinceEpoch}';
+
+        // Call PayChangu create edge function to get payment parameters
+        final paymentResponse = await _supabaseService.client.functions.invoke(
+          'paychangu-create',
+          body: {
+            'order_id': orderId,
+            'tx_ref': txRef,
+            'payer_customer_id': _supabaseService.client.auth.currentUser!.id,
+            'amount': finalAmount,
+            'return_url':
+                'https://dinetrack-3hhc.onrender.com/#/payment/success',
+          },
+        );
+
+        if (paymentResponse.status != 200 || paymentResponse.data == null) {
+          throw 'Failed to initiate payment';
+        }
+
+        final paymentData = paymentResponse.data;
+        final checkoutUrl = paymentData['checkout_url'] as String? ?? '';
+        final paymentId = paymentData['payment_id'] as String;
+
+        // Navigate to PayChangu payment screen
+        if (mounted) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (context) => PayChanguCheckout(
+                checkoutUrl: checkoutUrl,
+                paymentId: paymentId,
+                onSuccess: () => _handlePaymentSuccess(orderId),
+                onError: () => _handlePaymentFailure('Payment Error'),
+                onCancel: () => _handlePaymentCancellation(),
+              ),
+            ),
+          );
+        }
+        return; // Exit early for PayChangu - callbacks will handle the rest
+      }
+
+      // 3. Create payment record (for non-PayChangu methods)
+      await _supabaseService.client.from('payments').insert({
         'order_id': orderId,
-        'amount': finalAmount > 0 ? finalAmount : 0, // Handle full DineCoins payment
+        'amount': finalAmount > 0
+            ? finalAmount
+            : 0, // Handle full DineCoins payment
         'payment_method': paymentMethod,
         'dine_coins_used': dineCoinsUsed,
-        'status': paymentMethod == 'dine_coins' && finalAmount <= 0 ? 'completed' : 'pending',
+        'status': paymentMethod == 'dine_coins' && finalAmount <= 0
+            ? 'completed'
+            : 'pending',
       });
 
       // 4. If DineCoins were used, update ledger
       if (paymentMethod == 'dine_coins' && dineCoinsUsed > 0) {
-        await _supabaseService.client
-            .from('dinecoins_ledger')
-            .insert({
+        await _supabaseService.client.from('dinecoins_ledger').insert({
           'user_id': _supabaseService.client.auth.currentUser?.id,
           'establishment_id': widget.establishmentId,
           'amount': dineCoinsUsed,
@@ -239,7 +315,9 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         // 6. Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Order #${orderId.substring(0, 8)} placed successfully!'),
+            content: Text(
+              'Order #${orderId.substring(0, 8)} placed successfully!',
+            ),
             backgroundColor: Colors.green,
             duration: const Duration(seconds: 5),
           ),
@@ -251,7 +329,6 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
       debugPrint('Payment method: $paymentMethod');
       debugPrint('DineCoins used: $dineCoinsUsed');
       debugPrint('Final amount: $finalAmount');
-
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -265,11 +342,60 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     }
   }
 
+  // Payment success handler
+  void _handlePaymentSuccess(String orderId) {
+    if (mounted) {
+      _clearCart();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment successful! Order #${orderId.substring(0, 8)}',
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+    debugPrint('Payment successful for order: $orderId');
+  }
+
+  // Payment failure handler
+  void _handlePaymentFailure(String error) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $error'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+    debugPrint('Payment failed: $error');
+  }
+
+  // Payment cancellation handler
+  void _handlePaymentCancellation() {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment cancelled'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+    debugPrint('Payment cancelled by user');
+  }
+
   // Helper method to get special instructions from cart items
   String? _getSpecialInstructions() {
     // Collect all special instructions from cart items
     final instructions = _cartItems.values
-        .where((item) => item.specialInstructions != null && item.specialInstructions!.isNotEmpty)
+        .where(
+          (item) =>
+              item.specialInstructions != null &&
+              item.specialInstructions!.isNotEmpty,
+        )
         .map((item) => '${item.menuItem.name}: ${item.specialInstructions}')
         .join('\n');
 
@@ -351,12 +477,17 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     final List<Widget> screens = [
       HomeCustomer(
         establishmentId: widget.establishmentId,
+        tableId: _resolvedTableId,
         onAddToCart: _addToCart,
         cartItemCount: _cartItemCount,
+        cartItems: _cartItems,
+        onUpdateQuantity: _updateCartQuantity,
+        onRemoveFromCart: _removeFromCart,
+        onClearCart: _clearCart,
+        cartTotal: _cartTotal,
+        onCheckout: _handleCheckout,
       ),
-      FavoritesScreen(
-        onAddToCart: _addToCart,
-      ),
+      FavoritesScreen(onAddToCart: _addToCart),
       CartScreen(
         establishmentId: widget.establishmentId,
         cartItems: _cartItems,
@@ -384,7 +515,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha:0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 10,
             offset: const Offset(0, -2),
           ),
@@ -537,8 +668,12 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
   void _updateDineCoinsUsed(String value) {
     final newValue = double.tryParse(value) ?? 0.0;
     setState(() {
-      _dineCoinsUsed = newValue.clamp(0.0,
-          widget.dineCoinsBalance > widget.cartTotal ? widget.cartTotal : widget.dineCoinsBalance);
+      _dineCoinsUsed = newValue.clamp(
+        0.0,
+        widget.dineCoinsBalance > widget.cartTotal
+            ? widget.cartTotal
+            : widget.dineCoinsBalance,
+      );
     });
   }
 
@@ -563,43 +698,49 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
             const SizedBox(height: 8),
             Text('Total: ${widget.cartTotal.toStringAsFixed(0)} MWK'),
 
-            if (widget.canUseDineCoins) ...[
-              const SizedBox(height: 16),
-              const Text(
-                'Payment Method',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment<String>(
-                    value: 'cash',
-                    label: Text('Cash'),
-                    icon: Icon(Icons.attach_money),
-                  ),
-                  ButtonSegment<String>(
+            const SizedBox(height: 16),
+            const Text(
+              'Payment Method',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: [
+                const ButtonSegment<String>(
+                  value: 'cash',
+                  label: Text('Cash'),
+                  icon: Icon(Icons.attach_money),
+                ),
+                const ButtonSegment<String>(
+                  value: 'paychangu',
+                  label: Text('PayChangu'),
+                  icon: Icon(Icons.credit_card),
+                ),
+                if (widget.canUseDineCoins)
+                  const ButtonSegment<String>(
                     value: 'dine_coins',
                     label: Text('DineCoins'),
                     icon: Icon(Icons.account_balance_wallet),
                   ),
-                ],
-                selected: {_selectedPaymentMethod},
-                onSelectionChanged: (Set<String> newSelection) {
-                  setState(() {
-                    _selectedPaymentMethod = newSelection.first;
-                  });
-                },
-                style: SegmentedButton.styleFrom(
-                  backgroundColor: Colors.grey[100],
-                  selectedBackgroundColor: const Color(0xFF53B175),
-                  selectedForegroundColor: Colors.white,
-                ),
+              ],
+              selected: {_selectedPaymentMethod},
+              onSelectionChanged: (Set<String> newSelection) {
+                setState(() {
+                  _selectedPaymentMethod = newSelection.first;
+                });
+              },
+              style: SegmentedButton.styleFrom(
+                backgroundColor: Colors.grey[100],
+                selectedBackgroundColor: const Color(0xFF53B175),
+                selectedForegroundColor: Colors.white,
               ),
-            ],
+            ),
 
             if (_selectedPaymentMethod == 'dine_coins') ...[
               const SizedBox(height: 16),
-              Text('Available DineCoins: ${widget.dineCoinsBalance.toStringAsFixed(0)}'),
+              Text(
+                'Available DineCoins: ${widget.dineCoinsBalance.toStringAsFixed(0)}',
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: _dineCoinsController,
@@ -620,7 +761,8 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                 ),
             ],
 
-            if (_selectedPaymentMethod == 'dine_coins' && _dineCoinsUsed > 0) ...[
+            if (_selectedPaymentMethod == 'dine_coins' &&
+                _dineCoinsUsed > 0) ...[
               const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -633,9 +775,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
                   children: [
                     const Text(
                       'Final Amount to Pay:',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     Text(
                       '${_finalAmount.toStringAsFixed(0)} MWK',

@@ -1,0 +1,9 @@
+{
+  "importMap": "./import_map.json",
+  "supabase": {
+    "verify_jwt": false
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom"]
+  }
+}

@@ -1,0 +1,9 @@
+{
+    "deno.enable": true,
+    "deno.enablePaths": [
+        "functions"
+    ],
+    "deno.path": "C:\\Users\\969\\.deno\\bin\\deno.exe",
+    "deno.unstable": true,
+    "deno.importMap": "functions/supabase/functions/create-paychangu-payment/import_map.json"
+}

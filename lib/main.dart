@@ -1,19 +1,17 @@
+import 'package:dinetrack/landing_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/services/supabase_service.dart';
-import 'login_page.dart';
+
 import 'core/routing/role_router.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Detect environment
-  const env = String.fromEnvironment(
-    'FLUTTER_ENV',
-    defaultValue: 'production',
-  );
+  const env = String.fromEnvironment('FLUTTER_ENV', defaultValue: 'production');
 
   // Load correct env file
   await dotenv.load(fileName: "assets/env/.env.$env");
@@ -33,7 +31,6 @@ Future<void> main() async {
 class DineTrackApp extends StatelessWidget {
   const DineTrackApp({super.key});
 
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -44,7 +41,6 @@ class DineTrackApp extends StatelessWidget {
       ),
       home: const AuthGate(),
       debugShowCheckedModeBanner: false,
-
     );
   }
 }
@@ -68,7 +64,7 @@ class AuthGate extends StatelessWidget {
         final session = authState?.session;
 
         if (session == null) {
-          return const LoginPage();
+          return const LandingPage();
         }
 
         return RoleBasedRouter(userId: session.user.id);

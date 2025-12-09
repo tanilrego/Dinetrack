@@ -2,17 +2,30 @@ import 'package:flutter/material.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
 import 'item_detail_screen.dart';
+import 'cart_screen.dart';
 
 class MenuScreen extends StatefulWidget {
   final String establishmentId;
   final Function(MenuItem, {int quantity}) onAddToCart;
   final int cartItemCount;
+  final Map<String, CartItem> cartItems;
+  final Function(String, int) onUpdateQuantity;
+  final Function(String) onRemoveFromCart;
+  final Function() onClearCart;
+  final double cartTotal;
+  final Function() onCheckout;
 
   const MenuScreen({
     super.key,
     required this.establishmentId,
     required this.onAddToCart,
     this.cartItemCount = 0,
+    required this.cartItems,
+    required this.onUpdateQuantity,
+    required this.onRemoveFromCart,
+    required this.onClearCart,
+    required this.cartTotal,
+    required this.onCheckout,
   });
 
   @override
@@ -21,7 +34,7 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF53B175);
+  final Color _primaryGreen = const Color(0xFF2196F3); // Changed to Blue
   final Color _lightGrey = const Color(0xFFF2F3F2);
   final Color _darkGrey = const Color(0xFF7C7C7C);
 
@@ -38,15 +51,15 @@ class _MenuScreenState extends State<MenuScreen> {
   @override
   void initState() {
     super.initState();
-    print('MenuScreen - Establishment ID: "${widget.establishmentId}"');
-    print('Is empty? ${widget.establishmentId.isEmpty}');
+    // print('MenuScreen - Establishment ID: "${widget.establishmentId}"');
+    // print('Is empty? ${widget.establishmentId.isEmpty}');
     _loadData();
     _searchController.addListener(_onSearchChanged);
   }
+
   Future<void> _refreshData() async {
     await _loadData();
   }
-
 
   @override
   void dispose() {
@@ -55,7 +68,7 @@ class _MenuScreenState extends State<MenuScreen> {
     super.dispose();
   }
 
-  Future<void> _loadData() async {
+  /*Future<void> _loadData() async {
     setState(() {
       _loading = true;
       _error = '';
@@ -71,15 +84,19 @@ class _MenuScreenState extends State<MenuScreen> {
 
     try {
       // Load categories
-      final categories = await _supabaseService.getCategories(establishmentId: widget.establishmentId);
-      print('DEBUG: Categories loaded: ${categories.length}');
+      final categories = await _supabaseService.getCategories(
+        establishmentId: widget.establishmentId,
+      );
+      // print('DEBUG: Categories loaded: ${categories.length}');
 
       // Load all menu items
-      final allItems = await _supabaseService.getMenuItemsByEstablishment(widget.establishmentId);
-      print('DEBUG: Menu items loaded: ${allItems.length}');
+      final allItems = await _supabaseService.getMenuItemsByEstablishment(
+        widget.establishmentId,
+      );
+      // print('DEBUG: Menu items loaded: ${allItems.length}');
 
       if (allItems.isEmpty) {
-        print('DEBUG: No menu items found');
+        // print('DEBUG: No menu items found');
         setState(() {
           _categories = [];
           _menuItemsByCategory = {};
@@ -91,11 +108,14 @@ class _MenuScreenState extends State<MenuScreen> {
 
       // If categories are empty but items exist, fetch categories from items
       if (categories.isEmpty && allItems.isNotEmpty) {
-        print('DEBUG: No categories found, but items exist. Fetching categories from items...');
+        // print('DEBUG: No categories found, but items exist. Fetching categories from items...');
 
         // Get unique category IDs from items
-        final categoryIds = allItems.map((item) => item.categoryId).toSet().toList();
-        print('DEBUG: Unique category IDs from items: $categoryIds');
+        final categoryIds = allItems
+            .map((item) => item.categoryId)
+            .toSet()
+            .toList();
+        // print('DEBUG: Unique category IDs from items: $categoryIds');
 
         // Fetch these categories directly - FIXED: Using manual OR query
         final orConditions = categoryIds.map((id) => 'id.eq.$id').join(',');
@@ -110,14 +130,14 @@ class _MenuScreenState extends State<MenuScreen> {
           final fetchedCategories = (response as List)
               .map((cat) => AppCategory.fromJson(cat))
               .toList();
-          print('DEBUG: Fetched ${fetchedCategories.length} categories from items');
+          // print('DEBUG: Fetched ${fetchedCategories.length} categories from items');
           _categories = fetchedCategories;
         } else {
           // Create dummy categories from item data
-          print('DEBUG: Creating dummy categories from items');
+          // print('DEBUG: Creating dummy categories from items');
           _categories = categoryIds.map((id) {
             // Find an item with this category
-            final itemWithCategory = allItems.firstWhere((item) => item.categoryId == id);
+            // final itemWithCategory = allItems.firstWhere((item) => item.categoryId == id);
             return AppCategory(
               id: id,
               name: 'Category $id',
@@ -145,7 +165,7 @@ class _MenuScreenState extends State<MenuScreen> {
           groupedItems[item.categoryId]!.add(item);
         } else {
           // Category not in our list, create it
-          print('DEBUG: Item ${item.name} has unknown category ${item.categoryId}');
+          // print('DEBUG: Item ${item.name} has unknown category ${item.categoryId}');
           if (!groupedItems.containsKey(item.categoryId)) {
             groupedItems[item.categoryId] = [];
           }
@@ -153,22 +173,24 @@ class _MenuScreenState extends State<MenuScreen> {
 
           // Also add to categories list if not already there
           if (!_categories.any((cat) => cat.id == item.categoryId)) {
-            _categories.add(AppCategory(
-              id: item.categoryId,
-              name: 'Category ${item.categoryId.substring(0, 8)}...',
-              establishmentId: widget.establishmentId,
-              isActive: true,
-              displayOrder: 999, // Put at the end
-            ));
+            _categories.add(
+              AppCategory(
+                id: item.categoryId,
+                name: 'Category ${item.categoryId.substring(0, 8)}...',
+                establishmentId: widget.establishmentId,
+                isActive: true, // Put at the end
+                displayOrder: 999,
+              ),
+            );
           }
         }
       }
 
       // Log the grouping result
-      print('DEBUG: Final categories: ${_categories.length}');
-      print('DEBUG: Grouped items:');
+      // print('DEBUG: Final categories: ${_categories.length}');
+      // print('DEBUG: Grouped items:');
       groupedItems.forEach((categoryId, items) {
-        print('  Category $categoryId: ${items.length} items');
+        // print('  Category $categoryId: ${items.length} items');
       });
 
       setState(() {
@@ -176,24 +198,141 @@ class _MenuScreenState extends State<MenuScreen> {
 
         if (_categories.isNotEmpty) {
           _selectedCategoryId = _categories.first.id;
-          print('DEBUG: Selected category ID: $_selectedCategoryId');
-          print('DEBUG: Items in selected category: ${groupedItems[_selectedCategoryId]?.length ?? 0}');
+          // print('DEBUG: Selected category ID: $_selectedCategoryId');
+          // print('DEBUG: Items in selected category: ${groupedItems[_selectedCategoryId]?.length ?? 0}');
         } else {
           _selectedCategoryId = '';
-          print('DEBUG: No categories found');
+          // print('DEBUG: No categories found');
         }
 
         _loading = false;
       });
     } catch (e) {
-      print('ERROR in _loadData: $e');
-      print('STACK TRACE: ${e.toString()}');
+      // print('ERROR in _loadData: $e');
+      // print('STACK TRACE: ${e.toString()}');
+      setState(() {
+        _error = 'Failed to load menu. Please try again.';
+        _loading = false;
+      });
+    }
+  }*/
+
+  Future<void> _loadData() async {
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+
+    if (widget.establishmentId.isEmpty) {
+      setState(() {
+        _error = 'No establishment selected';
+        _loading = false;
+      });
+      return;
+    }
+
+    try {
+      // Load global categories (no establishment filter)
+      final categories = await _supabaseService.getCategories();
+
+      // Load all menu items filtered by establishment
+      final allItems = await _supabaseService.getMenuItemsByEstablishment(
+        widget.establishmentId,
+      );
+
+      if (allItems.isEmpty) {
+        setState(() {
+          _categories = [];
+          _menuItemsByCategory = {};
+          _selectedCategoryId = '';
+          _loading = false;
+        });
+        return;
+      }
+
+      // If no categories but items exist, fetch categories based on item category IDs
+      if (categories.isEmpty && allItems.isNotEmpty) {
+        final categoryIds = allItems
+            .map((item) => item.categoryId)
+            .toSet()
+            .toList();
+
+        final orConditions = categoryIds.map((id) => 'id.eq.$id').join(',');
+
+        final response = await _supabaseService.client
+            .from('menu_categories')
+            .select()
+            .or(orConditions)
+            .eq('is_active', true)
+            .order('display_order');
+
+        if (response.isNotEmpty) {
+          final fetchedCategories = (response as List)
+              .map((cat) => AppCategory.fromJson(cat))
+              .toList();
+          _categories = fetchedCategories;
+        } else {
+          // Create dummy categories if none fetched
+          _categories = categoryIds.map((id) {
+            return AppCategory(
+              id: id,
+              name: 'Category $id',
+              establishmentId: '', // No establishment
+              isActive: true,
+              displayOrder: 0,
+            );
+          }).toList();
+        }
+      } else {
+        _categories = categories;
+      }
+
+      // Group items by category ID
+      final Map<String, List<MenuItem>> groupedItems = {};
+
+      for (final category in _categories) {
+        groupedItems[category.id] = [];
+      }
+
+      for (final item in allItems) {
+        if (groupedItems.containsKey(item.categoryId)) {
+          groupedItems[item.categoryId]!.add(item);
+        } else {
+          groupedItems[item.categoryId] = [item];
+
+          if (!_categories.any((cat) => cat.id == item.categoryId)) {
+            _categories.add(
+              AppCategory(
+                id: item.categoryId,
+                name: 'Category ${item.categoryId.substring(0, 8)}...',
+                establishmentId: '',
+                isActive: true,
+                displayOrder: 999,
+              ),
+            );
+          }
+        }
+      }
+
+      setState(() {
+        _menuItemsByCategory = groupedItems;
+
+        if (_categories.isNotEmpty) {
+          _selectedCategoryId = _categories.first.id;
+        } else {
+          _selectedCategoryId = '';
+        }
+
+        _loading = false;
+      });
+    } catch (e) {
       setState(() {
         _error = 'Failed to load menu. Please try again.';
         _loading = false;
       });
     }
   }
+
   void _onSearchChanged() {
     final query = _searchController.text.trim().toLowerCase();
     setState(() {
@@ -208,11 +347,16 @@ class _MenuScreenState extends State<MenuScreen> {
     }
 
     // Search through all menu items
-    final allItems = _menuItemsByCategory.values.expand((list) => list).toList();
-    final results = allItems.where((item) =>
-    item.name.toLowerCase().contains(query) ||
-        (item.description?.toLowerCase().contains(query) ?? false)
-    ).toList();
+    final allItems = _menuItemsByCategory.values
+        .expand((list) => list)
+        .toList();
+    final results = allItems
+        .where(
+          (item) =>
+              item.name.toLowerCase().contains(query) ||
+              (item.description?.toLowerCase().contains(query) ?? false),
+        )
+        .toList();
 
     setState(() {
       _searchResults = results;
@@ -226,7 +370,6 @@ class _MenuScreenState extends State<MenuScreen> {
       _searchResults = [];
     });
   }
-
 
   List<MenuItem> get _currentItems {
     if (_isSearching) {
@@ -247,10 +390,7 @@ class _MenuScreenState extends State<MenuScreen> {
       appBar: AppBar(
         title: const Text(
           'Menu',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         backgroundColor: _primaryGreen,
         foregroundColor: Colors.white,
@@ -260,7 +400,20 @@ class _MenuScreenState extends State<MenuScreen> {
               IconButton(
                 icon: const Icon(Icons.shopping_cart),
                 onPressed: () {
-                  // TODO: Navigate to cart screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CartScreen(
+                        establishmentId: widget.establishmentId,
+                        cartItems: widget.cartItems,
+                        onUpdateQuantity: widget.onUpdateQuantity,
+                        onRemoveFromCart: widget.onRemoveFromCart,
+                        onClearCart: widget.onClearCart,
+                        cartTotal: widget.cartTotal,
+                        onCheckout: widget.onCheckout,
+                      ),
+                    ),
+                  );
                 },
               ),
               if (widget.cartItemCount > 0)
@@ -278,7 +431,9 @@ class _MenuScreenState extends State<MenuScreen> {
                       minHeight: 16,
                     ),
                     child: Text(
-                      widget.cartItemCount > 9 ? '9+' : widget.cartItemCount.toString(),
+                      widget.cartItemCount > 9
+                          ? '9+'
+                          : widget.cartItemCount.toString(),
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -362,12 +517,15 @@ class _MenuScreenState extends State<MenuScreen> {
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 suffixIcon: _isSearching
                     ? IconButton(
-                  icon: const Icon(Icons.close, color: Colors.grey),
-                  onPressed: _clearSearch,
-                )
+                        icon: const Icon(Icons.close, color: Colors.grey),
+                        onPressed: _clearSearch,
+                      )
                     : null,
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
               ),
             ),
           ),
@@ -388,15 +546,9 @@ class _MenuScreenState extends State<MenuScreen> {
           children: [
             Text(
               'Search Results (${_searchResults.length})',
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            TextButton(
-              onPressed: _clearSearch,
-              child: const Text('Clear'),
-            ),
+            TextButton(onPressed: _clearSearch, child: const Text('Clear')),
           ],
         ),
       ),
@@ -425,7 +577,7 @@ class _MenuScreenState extends State<MenuScreen> {
       ),
       const SizedBox(height: 8),
       // Selected Category Title
-// Selected Category Title
+      // Selected Category Title
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
@@ -433,14 +585,13 @@ class _MenuScreenState extends State<MenuScreen> {
             Text(
               _categories.isEmpty
                   ? 'Menu'
-                  : _categories.firstWhere(
-                    (cat) => cat.id == _selectedCategoryId,
-                orElse: () => _categories.first,
-              ).name,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+                  : _categories
+                        .firstWhere(
+                          (cat) => cat.id == _selectedCategoryId,
+                          orElse: () => _categories.first,
+                        )
+                        .name,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const Spacer(),
             Text(
@@ -456,9 +607,9 @@ class _MenuScreenState extends State<MenuScreen> {
         child: _currentItems.isEmpty
             ? _buildEmptyCategoryState()
             : RefreshIndicator(
-          onRefresh: _refreshData,
-          child: _buildMenuItemsGrid(_currentItems),
-        ),
+                onRefresh: _refreshData,
+                child: _buildMenuItemsGrid(_currentItems),
+              ),
       ),
     ];
   }
@@ -560,30 +711,41 @@ class _MenuScreenState extends State<MenuScreen> {
                   ),
                   child: item.imageUrl != null && item.imageUrl!.isNotEmpty
                       ? ClipRRect(
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      topRight: Radius.circular(16),
-                    ),
-                    child: Image.network(
-                      item.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Center(
-                          child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                        );
-                      },
-                    ),
-                  )
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                          ),
+                          child: Image.network(
+                            item.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Center(
+                                child: Icon(
+                                  Icons.fastfood,
+                                  color: _darkGrey,
+                                  size: 40,
+                                ),
+                              );
+                            },
+                          ),
+                        )
                       : Center(
-                    child: Icon(Icons.fastfood, color: _darkGrey, size: 40),
-                  ),
+                          child: Icon(
+                            Icons.fastfood,
+                            color: _darkGrey,
+                            size: 40,
+                          ),
+                        ),
                 ),
                 if (item.isBestseller)
                   Positioned(
                     top: 8,
                     left: 8,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: _primaryGreen,
                         borderRadius: BorderRadius.circular(8),
@@ -621,10 +783,7 @@ class _MenuScreenState extends State<MenuScreen> {
                     const SizedBox(height: 4),
                     Text(
                       item.description ?? "Fresh and delicious",
-                      style: TextStyle(
-                        color: _darkGrey,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: _darkGrey, fontSize: 12),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),

@@ -19,7 +19,7 @@ class AppCategory {
   factory AppCategory.fromJson(Map<String, dynamic> json) {
     return AppCategory(
       id: json['id'] as String,
-      establishmentId: json['establishment_id'] as String,
+      establishmentId: json['establishment_id'] as String? ?? '',
       name: json['name'] as String,
       description: json['description'] as String?,
       displayOrder: json['display_order'] as int? ?? 0,
@@ -153,10 +153,7 @@ class CartItem {
   double get totalPrice => menuItem.price * quantity;
 
   // Enhanced copyWith method for better immutability
-  CartItem copyWith({
-    MenuItem? menuItem,
-    int? quantity,
-  }) {
+  CartItem copyWith({MenuItem? menuItem, int? quantity}) {
     return CartItem(
       menuItem: menuItem ?? this.menuItem,
       quantity: quantity ?? this.quantity,
@@ -175,10 +172,7 @@ class CartItem {
 
   // Convert to JSON for potential persistence
   Map<String, dynamic> toJson() {
-    return {
-      'menu_item': menuItem.toJson(),
-      'quantity': quantity,
-    };
+    return {'menu_item': menuItem.toJson(), 'quantity': quantity};
   }
 
   // Create from JSON
