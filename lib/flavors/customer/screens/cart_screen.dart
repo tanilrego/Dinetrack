@@ -52,26 +52,26 @@ class CartScreen extends StatelessWidget {
             child: cartItems.isEmpty
                 ? _buildEmptyCart()
                 : ListView.separated(
-              padding: const EdgeInsets.all(20),
-              itemCount: cartItems.length,
-              separatorBuilder: (_, __) => const Divider(height: 30),
-              itemBuilder: (context, index) {
-                final cartItem = cartItems.values.elementAt(index);
-                final menuItem = cartItem.menuItem;
-                final quantity = cartItem.quantity;
-                final price = menuItem.price;
-                final imageUrl = menuItem.imageUrl;
+                    padding: const EdgeInsets.all(20),
+                    itemCount: cartItems.length,
+                    separatorBuilder: (_, __) => const Divider(height: 30),
+                    itemBuilder: (context, index) {
+                      final cartItem = cartItems.values.elementAt(index);
+                      final menuItem = cartItem.menuItem;
+                      final quantity = cartItem.quantity;
+                      final price = menuItem.price;
+                      final imageUrl = menuItem.imageUrl;
 
-                return _buildCartItem(
-                  context,
-                  cartItem,
-                  menuItem,
-                  quantity,
-                  price,
-                  imageUrl,
-                );
-              },
-            ),
+                      return _buildCartItem(
+                        context,
+                        cartItem,
+                        menuItem,
+                        quantity,
+                        price,
+                        imageUrl,
+                      );
+                    },
+                  ),
           ),
           // Checkout Section
           if (cartItems.isNotEmpty) _buildCheckoutSection(context),
@@ -85,7 +85,11 @@ class CartScreen extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey.shade400),
+          Icon(
+            Icons.shopping_cart_outlined,
+            size: 80,
+            color: Colors.grey.shade400,
+          ),
           const SizedBox(height: 16),
           Text(
             'Your cart is empty',
@@ -102,13 +106,13 @@ class CartScreen extends StatelessWidget {
   }
 
   Widget _buildCartItem(
-      BuildContext context,
-      CartItem cartItem,
-      MenuItem menuItem,
-      int quantity,
-      double price,
-      String? imageUrl,
-      ) {
+    BuildContext context,
+    CartItem cartItem,
+    MenuItem menuItem,
+    int quantity,
+    double price,
+    String? imageUrl,
+  ) {
     return Dismissible(
       key: Key(menuItem.id),
       direction: DismissDirection.endToStart,
@@ -149,41 +153,47 @@ class CartScreen extends StatelessWidget {
               ),
               child: imageUrl != null && imageUrl.isNotEmpty
                   ? ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                            loadingProgress.expectedTotalBytes!
-                            : null,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.network(
+                        imageUrl,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: CircularProgressIndicator(
+                              value: loadingProgress.expectedTotalBytes != null
+                                  ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                  : null,
+                            ),
+                          );
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.fastfood,
+                              color: Colors.grey.shade400,
+                              size: 30,
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
+                    )
+                  : Container(
                       decoration: BoxDecoration(
                         color: Colors.grey.shade200,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.fastfood,
-                          color: Colors.grey.shade400, size: 30),
-                    );
-                  },
-                ),
-              )
-                  : Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.fastfood,
-                    color: Colors.grey.shade400, size: 30),
-              ),
+                      child: Icon(
+                        Icons.fastfood,
+                        color: Colors.grey.shade400,
+                        size: 30,
+                      ),
+                    ),
             ),
             const SizedBox(width: 15),
 
@@ -204,16 +214,14 @@ class CartScreen extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     menuItem.description ?? "Fresh and delicious",
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 14,
-                    ),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
 
                   // Special Instructions - Fixed for schema compatibility
-                  if (cartItem.specialInstructions != null && cartItem.specialInstructions!.isNotEmpty)
+                  if (cartItem.specialInstructions != null &&
+                      cartItem.specialInstructions!.isNotEmpty)
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -245,13 +253,16 @@ class CartScreen extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            _buildQuantityButton(
-                              Icons.remove,
-                                  () => onUpdateQuantity(menuItem.id, quantity - 1),
-                              enabled: quantity > 1,
-                            ),
+                            _buildQuantityButton(Icons.remove, () {
+                              // Get fresh quantity from cart state
+                              final currentQty =
+                                  cartItems[menuItem.id]?.quantity ?? 1;
+                              onUpdateQuantity(menuItem.id, currentQty - 1);
+                            }, enabled: quantity > 1),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
                               child: Text(
                                 '$quantity',
                                 style: const TextStyle(
@@ -260,10 +271,12 @@ class CartScreen extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            _buildQuantityButton(
-                              Icons.add,
-                                  () => onUpdateQuantity(menuItem.id, quantity + 1),
-                            ),
+                            _buildQuantityButton(Icons.add, () {
+                              // Get fresh quantity from cart state
+                              final currentQty =
+                                  cartItems[menuItem.id]?.quantity ?? 1;
+                              onUpdateQuantity(menuItem.id, currentQty + 1);
+                            }),
                           ],
                         ),
                       ),
@@ -289,21 +302,21 @@ class CartScreen extends StatelessWidget {
   }
 
   Widget _buildQuantityButton(
-      IconData icon,
-      VoidCallback onTap, {
-        bool enabled = true,
-      }) {
+    IconData icon,
+    VoidCallback onTap, {
+    bool enabled = true,
+  }) {
     return Container(
       width: 32,
       height: 32,
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
         color: enabled
-            ? (icon == Icons.add ? _primaryGreen.withValues(alpha: 0.1) : Colors.transparent)
+            ? (icon == Icons.add
+                  ? _primaryGreen.withValues(alpha: 0.1)
+                  : Colors.transparent)
             : Colors.grey.shade100,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         child: InkWell(
           onTap: enabled ? onTap : null,
           borderRadius: BorderRadius.circular(8),
@@ -462,7 +475,9 @@ class CartScreen extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Cart'),
-        content: const Text('Are you sure you want to remove all items from your cart?'),
+        content: const Text(
+          'Are you sure you want to remove all items from your cart?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -474,17 +489,17 @@ class CartScreen extends StatelessWidget {
               Navigator.pop(context);
               _showSnackBar(context, 'Cart cleared successfully');
             },
-            child: const Text(
-              'Clear All',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Clear All', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
 
-  Future<bool?> _showDeleteConfirmationDialog(BuildContext context, String itemName) async {
+  Future<bool?> _showDeleteConfirmationDialog(
+    BuildContext context,
+    String itemName,
+  ) async {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -497,10 +512,7 @@ class CartScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -513,9 +525,7 @@ class CartScreen extends StatelessWidget {
         content: Text(message),
         backgroundColor: _primaryGreen,
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
       ),
     );
