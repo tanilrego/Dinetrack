@@ -376,13 +376,16 @@ class _CartScreenState extends State<CartScreen> {
               ),
               child: Column(
                 children: [
-                  _buildSummaryRow('Subtotal', widget.cartTotal),
+                  _buildSummaryRow(
+                    'Subtotal',
+                    _calculateTotal(),
+                  ), // Calculate dynamically
                   const SizedBox(height: 8),
-                  _buildSummaryRow('Tax', _calculateTax(widget.cartTotal)),
+                  _buildSummaryRow('Tax', _calculateTax(_calculateTotal())),
                   const Divider(height: 20),
                   _buildSummaryRow(
                     'Total Amount',
-                    widget.cartTotal + _calculateTax(widget.cartTotal),
+                    _calculateTotal() + _calculateTax(_calculateTotal()),
                     isTotal: true,
                   ),
                 ],
@@ -476,6 +479,13 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  double _calculateTotal() {
+    return widget.cartItems.values.fold(
+      0.0,
+      (sum, item) => sum + (item.menuItem.price * item.quantity),
     );
   }
 

@@ -30,8 +30,27 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
   @override
   void initState() {
     super.initState();
-    // Initialize WebView for both mobile AND web
-    _initializeWebView();
+    // Use platform-specific initialization
+    if (kIsWeb) {
+      _handleWebPayment();
+    } else {
+      _initializeWebView();
+    }
+  }
+
+  void _handleWebPayment() async {
+    // Navigate to payment in same tab using _self
+    // This avoids iframe blocking issues (X-Frame-Options)
+    if (await canLaunchUrl(Uri.parse(widget.checkoutUrl))) {
+      await launchUrl(
+        Uri.parse(widget.checkoutUrl),
+        webOnlyWindowName: '_self',
+      );
+      // We don't pop here because the browser will navigate away
+      // Upon return, the app reloads and handles redirection
+    } else {
+      widget.onError();
+    }
   }
 
   void _initializeWebView() {
@@ -54,7 +73,9 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
             debugPrint('WebView error: ${error.description}');
           },
           onNavigationRequest: (NavigationRequest request) {
-            _handleUrlChange(request.url);
+            if (_handleUrlChange(request.url)) {
+              return NavigationDecision.prevent;
+            }
             return NavigationDecision.navigate;
           },
         ),
@@ -62,18 +83,21 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
       ..loadRequest(Uri.parse(widget.checkoutUrl));
   }
 
-  void _handleUrlChange(String url) {
+  bool _handleUrlChange(String url) {
     debugPrint('URL changed: $url');
 
-    // Check for success/cancel patterns in URL
     if (url.contains('payment/success') || url.contains('status=success')) {
       widget.onSuccess();
+      return true;
     } else if (url.contains('payment/cancel') ||
         url.contains('status=cancel')) {
       widget.onCancel();
+      return true;
     } else if (url.contains('payment/error') || url.contains('status=error')) {
       widget.onError();
+      return true;
     }
+    return false;
   }
 
   Future<void> _openInBrowser() async {
@@ -87,17 +111,36 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
 
   @override
   Widget build(BuildContext context) {
-    // Use WebView for ALL platforms (mobile and web)
+    // Web: Show processing screen while redirecting
+    if (kIsWeb) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Processing Payment')),
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 24),
+              Text(
+                'Redirecting to payment gateway...',
+                style: TextStyle(fontSize: 16),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Mobile: Show Inline WebView
     return Scaffold(
       appBar: AppBar(
         title: const Text('Complete Payment'),
         actions: [
-          if (!kIsWeb)
-            IconButton(
-              icon: const Icon(Icons.open_in_browser),
-              onPressed: _openInBrowser,
-              tooltip: 'Open in browser',
-            ),
+          IconButton(
+            icon: const Icon(Icons.open_in_browser),
+            onPressed: _openInBrowser,
+            tooltip: 'Open in browser',
+          ),
         ],
       ),
       body: Stack(

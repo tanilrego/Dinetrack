@@ -1181,14 +1181,22 @@ class _LandingPageState extends State<LandingPage> {
                           : 48, // Fixed height for button to match design
                       child: ElevatedButton(
                         onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CustomerNavigation(
-                                establishmentId: establishmentId,
+                          final user =
+                              Supabase.instance.client.auth.currentUser;
+                          if (user != null) {
+                            // Authenticated -> Go to Menu/Customer App
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CustomerNavigation(
+                                  establishmentId: establishmentId,
+                                ),
                               ),
-                            ),
-                          );
+                            );
+                          } else {
+                            // Unauthenticated -> Show Dialog
+                            _showAccessDialog(context, establishmentId);
+                          }
                         },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF10B981),
