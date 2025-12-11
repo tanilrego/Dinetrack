@@ -8,6 +8,8 @@ import 'dart:html' as html show window;
 
 import 'core/services/supabase_service.dart';
 import 'core/routing/role_router.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_web/webview_flutter_web.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +25,11 @@ Future<void> main() async {
     url: dotenv.env['SUPABASE_URL']!,
     anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
+
+  // Initialize WebView for Web
+  if (kIsWeb) {
+    WebViewPlatform.instance = WebWebViewPlatform();
+  }
 
   // Initialize DineTrack services
   await SupabaseService().postInit();

@@ -275,7 +275,6 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
 
         final paymentData = paymentResponse.data;
         final checkoutUrl = paymentData['checkout_url'] as String? ?? '';
-        final paymentId = paymentData['payment_id'] as String;
 
         // Navigate to PayChangu payment screen
         if (mounted) {
@@ -283,7 +282,6 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
             MaterialPageRoute(
               builder: (context) => PayChanguCheckout(
                 checkoutUrl: checkoutUrl,
-                paymentId: paymentId,
                 onSuccess: () => _handlePaymentSuccess(orderId),
                 onError: () => _handlePaymentFailure('Payment Error'),
                 onCancel: () => _handlePaymentCancellation(),
