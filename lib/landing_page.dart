@@ -6,6 +6,7 @@ import 'package:dinetrack/flavors/customer/screens/registration.dart';
 import 'package:dinetrack/flavors/customer/screens/customer_navigation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/supabase_service.dart';
+import 'core/services/auth_service.dart';
 import 'core/widgets/restaurant_details_dialog.dart';
 
 class LandingPage extends StatefulWidget {
@@ -24,7 +25,7 @@ class _LandingPageState extends State<LandingPage> {
   bool _loadingRestaurants = true;
 
   // Static variable to persist intended destination across auth rebuilds
-  static String? _redirectEstablishmentId;
+  // Moved to AuthService.pendingEstablishmentId
 
   @override
   void initState() {
@@ -32,27 +33,25 @@ class _LandingPageState extends State<LandingPage> {
     _fetchRestaurants();
 
     // Check for pending navigation (from deep link OR internal redirect)
-    final targetId = widget.pendingEstablishmentId ?? _redirectEstablishmentId;
+    final targetId =
+        widget.pendingEstablishmentId ?? AuthService.pendingEstablishmentId;
 
     if (targetId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Clear the redirect id to prevent loops if we strictly needed to,
-        // but keeping it until success is safer?
-        // For now, let's assume we consume it.
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        // Wait for restaurant data to be available if needed
+        while (_loadingRestaurants) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
 
-        final user = Supabase.instance.client.auth.currentUser;
-        if (mounted && user != null) {
-          _redirectEstablishmentId = null; // Consumed
-
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CustomerNavigation(establishmentId: targetId),
-            ),
+        if (mounted) {
+          final restaurant = _restaurants.firstWhere(
+            (r) => r['id'] == targetId,
+            orElse: () => {},
           );
-        } else if (mounted && widget.pendingEstablishmentId != null) {
-          // Only show auth dialog automatically if it came from a deep link (widget param)
-          _showAccessDialog(context, targetId);
+
+          if (restaurant.isNotEmpty) {
+            _openRestaurantDetails(restaurant);
+          }
         }
       });
     }
@@ -94,7 +93,7 @@ class _LandingPageState extends State<LandingPage> {
 
   Future<void> _signInAsGuest(String? targetEstablishmentId) async {
     if (targetEstablishmentId != null) {
-      _redirectEstablishmentId = targetEstablishmentId;
+      AuthService.pendingEstablishmentId = targetEstablishmentId;
     }
 
     setState(() {
@@ -124,7 +123,7 @@ class _LandingPageState extends State<LandingPage> {
       });
     } catch (e) {
       setState(() => _errorMessage = "Guest login failed: $e");
-      _redirectEstablishmentId = null;
+      AuthService.pendingEstablishmentId = null;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1010,13 +1009,17 @@ class _LandingPageState extends State<LandingPage> {
       builder: (context) => RestaurantDetailsDialog(
         restaurant: restaurant,
         onVisitPressed: () {
+          final establishmentId = restaurant['id'];
+          // Set persistent ID so Router knows where to go after login
+          AuthService.pendingEstablishmentId = establishmentId;
+
           Navigator.pop(context); // Close details dialog
 
-          final establishmentId = restaurant['id'];
           final user = Supabase.instance.client.auth.currentUser;
 
           if (user != null) {
-            // Authenticated -> Go to Menu/Customer App
+            // If already logged in (unlikely due to Router auto-logout, but possible)
+            // Go direct
             Navigator.push(
               context,
               MaterialPageRoute(

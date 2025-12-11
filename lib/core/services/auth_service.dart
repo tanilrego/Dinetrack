@@ -2,6 +2,7 @@ import 'supabase_service.dart';
 
 class AuthService {
   final SupabaseService _supabase = SupabaseService();
+  static String? pendingEstablishmentId;
 
   Future<Map<String, dynamic>?> getCurrentUserProfile() async {
     final userId = _supabase.currentUserId;
@@ -19,5 +20,9 @@ class AuthService {
   Future<String?> getUserRole() async {
     final profile = await getCurrentUserProfile();
     return profile?['user_type'];
+  }
+
+  Future<void> signOut() async {
+    await _supabase.client.auth.signOut();
   }
 }

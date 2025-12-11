@@ -8,7 +8,6 @@ import 'dart:html' as html show window;
 
 import 'core/services/supabase_service.dart';
 import 'core/routing/role_router.dart';
-import 'flavors/customer/screens/customer_navigation.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,28 +101,15 @@ class _AuthGateState extends State<AuthGate> {
         final authState = snapshot.data;
         final session = authState?.session;
 
-        // If user is not authenticated
         if (session == null) {
           return LandingPage(pendingEstablishmentId: _pendingEstablishmentId);
         }
 
-        // User is authenticated - check for deep link
-        if (_pendingEstablishmentId != null) {
-          // Navigate to restaurant after a frame to avoid build-time navigation
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.of(context).pushReplacement(
-                MaterialPageRoute(
-                  builder: (_) => CustomerNavigation(
-                    establishmentId: _pendingEstablishmentId!,
-                  ),
-                ),
-              );
-            }
-          });
-        }
-
-        return RoleBasedRouter(userId: session.user.id);
+        // Pass the pending ID to the router so the LandingPage can show the dialog
+        return RoleBasedRouter(
+          userId: session.user.id,
+          pendingEstablishmentId: _pendingEstablishmentId,
+        );
       },
     );
   }

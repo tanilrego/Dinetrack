@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../../landing_page.dart';
 import '../services/auth_service.dart';
-//import '../../flavors/customer/screens/home_customer.dart';
+import '../../flavors/customer/screens/customer_navigation.dart';
 import '../../flavors/operator/screens/home_operator.dart';
 import '../../flavors/kitchen/screens/home_kitchen.dart';
 import '../../flavors/supervisor/screens/home_supervisor.dart';
 
 class RoleBasedRouter extends StatefulWidget {
-  const RoleBasedRouter({super.key, required String userId});
+  final String userId;
+  final String? pendingEstablishmentId;
+
+  const RoleBasedRouter({
+    super.key,
+    required this.userId,
+    this.pendingEstablishmentId,
+  });
 
   @override
   State<RoleBasedRouter> createState() => _RoleBasedRouterState();
@@ -43,7 +50,22 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
 
     switch (_userRole) {
       case 'customer':
-        return const LandingPage(); // Allow customers to select restaurant
+        final targetId =
+            widget.pendingEstablishmentId ?? AuthService.pendingEstablishmentId;
+
+        if (targetId != null) {
+          return CustomerNavigation(establishmentId: targetId);
+        }
+
+        // If no target establishment, user shouldn't be here as 'logged in customer'
+        // Sign out and show landing page (effectively "no session" state)
+        // We do this via a microtask to avoid build conflicts
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          await AuthService().signOut();
+        });
+        // Return loading or landing page (which will rebuild shortly)
+        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
       case 'operator':
         return OperatorHomeScreen();
       case 'kitchen':
