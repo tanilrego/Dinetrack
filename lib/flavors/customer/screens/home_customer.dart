@@ -182,7 +182,18 @@ class _HomeCustomerState extends State<HomeCustomer> {
         title: FutureBuilder<Map<String, dynamic>?>(
           future: _establishmentFuture,
           builder: (context, snapshot) {
-            if (snapshot.hasError) return const Text('DineTrack');
+            if (snapshot.hasError) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('DineTrack'),
+                  Text(
+                    'Error: ${widget.establishmentId}',
+                    style: const TextStyle(fontSize: 10),
+                  ),
+                ],
+              );
+            }
             final establishmentName = snapshot.data?['name'] ?? 'DineTrack';
             return Text(
               establishmentName,

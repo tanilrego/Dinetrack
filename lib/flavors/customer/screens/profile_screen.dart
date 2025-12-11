@@ -63,8 +63,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .select()
             .eq('customer_id', user.id);
 
-        final pending = ordersResponse.where((order) =>
-        order['status'] != 'completed' && order['status'] != 'cancelled').length;
+        final pending = ordersResponse
+            .where(
+              (order) =>
+                  order['status'] != 'completed' &&
+                  order['status'] != 'cancelled',
+            )
+            .length;
 
         setState(() {
           _totalOrders = ordersResponse.length;
@@ -82,15 +87,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _signOut() async {
     try {
+      // Clear any pending establishment ID to prevent auto-reentry
+      AuthService.pendingEstablishmentId = null;
+
       await _supabaseService.client.auth.signOut();
-      // Navigate to login screen or handle sign out
-      // You might want to use Navigator.pushReplacementNamed(context, '/login');
+
+      // The AuthGate stream in main.dart will handle the UI switch to LandingPage
+      // But just in case, we can force a rebuild or pop if we were deep in navigation
+      if (mounted) {
+        // Clearing navigation stack prevents "back" button issues
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } catch (e) {
       debugPrint('Error signing out: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error signing out: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
       }
     }
   }
@@ -98,9 +111,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showDineCoinsHistory() {
     showDialog(
       context: context,
-      builder: (context) => DineCoinsHistoryDialog(
-        supabaseService: _supabaseService,
-      ),
+      builder: (context) =>
+          DineCoinsHistoryDialog(supabaseService: _supabaseService),
     );
   }
 
@@ -108,9 +120,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => OrderHistoryScreen(
-          supabaseService: _supabaseService,
-        ),
+        builder: (context) =>
+            OrderHistoryScreen(supabaseService: _supabaseService),
       ),
     );
   }
@@ -140,22 +151,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         centerTitle: true,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF2196F3)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF2196F3)),
+            )
           : ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // Profile Header
-          _buildProfileHeader(),
-          const SizedBox(height: 30),
+              padding: const EdgeInsets.all(20),
+              children: [
+                // Profile Header
+                _buildProfileHeader(),
+                const SizedBox(height: 30),
 
-          // Statistics Cards
-          _buildStatisticsCards(),
-          const SizedBox(height: 20),
+                // Statistics Cards
+                _buildStatisticsCards(),
+                const SizedBox(height: 20),
 
-          // Menu Items
-          _buildMenuItems(),
-        ],
-      ),
+                // Menu Items
+                _buildMenuItems(),
+              ],
+            ),
     );
   }
 
@@ -169,11 +182,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         CircleAvatar(
           radius: 30,
           backgroundColor: const Color(0xFF2196F3).withValues(alpha: 0.1),
-          child: const Icon(
-            Icons.person,
-            color: Color(0xFF2196F3),
-            size: 30,
-          ),
+          child: const Icon(Icons.person, color: Color(0xFF2196F3), size: 30),
         ),
         const SizedBox(width: 15),
         Expanded(
@@ -182,12 +191,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 fullName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
-              Text(
-                email,
-                style: TextStyle(color: Colors.grey.shade500),
-              ),
+              Text(email, style: TextStyle(color: Colors.grey.shade500)),
               const SizedBox(height: 4),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -218,12 +227,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Expanded(
           child: Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  const Icon(Icons.card_giftcard, color: Color(0xFF53B175), size: 24),
+                  const Icon(
+                    Icons.card_giftcard,
+                    color: Color(0xFF53B175),
+                    size: 24,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     _dineCoinsBalance.toStringAsFixed(0),
@@ -248,7 +263,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Expanded(
           child: Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
@@ -278,12 +295,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         Expanded(
           child: Card(
             elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  const Icon(Icons.pending_actions, color: Colors.orange, size: 24),
+                  const Icon(
+                    Icons.pending_actions,
+                    color: Colors.orange,
+                    size: 24,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     _pendingOrders.toString(),
@@ -319,50 +342,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
           "DineCoins History",
           _showDineCoinsHistory,
         ),
-        _buildMenuItem(
-          Icons.badge_outlined,
-          "My Details",
-          _showUserDetails,
-        ),
-        _buildMenuItem(
-          Icons.location_on_outlined,
-          "Delivery Address",
-              () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Delivery address feature coming soon!')),
-            );
-          },
-        ),
-        _buildMenuItem(
-          Icons.credit_card,
-          "Payment Methods",
-              () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Payment methods feature coming soon!')),
-            );
-          },
-        ),
-        _buildMenuItem(
-          Icons.help_outline,
-          "Help & Support",
-              () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Help & support feature coming soon!')),
-            );
-          },
-        ),
-        _buildMenuItem(
-          Icons.info_outline,
-          "About",
-              () {
-            showAboutDialog(
-              context: context,
-              applicationName: 'DineEasy',
-              applicationVersion: '1.0.0',
-              applicationIcon: const Icon(Icons.restaurant, color: Color(0xFF53B175)),
-            );
-          },
-        ),
+        _buildMenuItem(Icons.badge_outlined, "My Details", _showUserDetails),
+        _buildMenuItem(Icons.location_on_outlined, "Delivery Address", () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Delivery address feature coming soon!'),
+            ),
+          );
+        }),
+        _buildMenuItem(Icons.credit_card, "Payment Methods", () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment methods feature coming soon!'),
+            ),
+          );
+        }),
+        _buildMenuItem(Icons.help_outline, "Help & Support", () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Help & support feature coming soon!'),
+            ),
+          );
+        }),
+        _buildMenuItem(Icons.info_outline, "About", () {
+          showAboutDialog(
+            context: context,
+            applicationName: 'DineEasy',
+            applicationVersion: '1.0.0',
+            applicationIcon: const Icon(
+              Icons.restaurant,
+              color: Color(0xFF53B175),
+            ),
+          );
+        }),
 
         const SizedBox(height: 20),
         // Logout Button
@@ -374,7 +386,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFFF2F3F2),
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
             ),
             child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -383,7 +397,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SizedBox(width: 20),
                 Text(
                   "Log Out",
-                  style: TextStyle(color: Color(0xFF53B175), fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Color(0xFF53B175),
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -399,8 +416,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ListTile(
           contentPadding: EdgeInsets.zero,
           leading: Icon(icon, color: Colors.black),
-          title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.black),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          trailing: const Icon(
+            Icons.arrow_forward_ios,
+            size: 16,
+            color: Colors.black,
+          ),
           onTap: onTap,
         ),
         const Divider(),
@@ -468,47 +492,58 @@ class _DineCoinsHistoryDialogState extends State<DineCoinsHistoryDialog> {
             ),
             const SizedBox(height: 16),
             _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF53B175)))
-                : _transactions.isEmpty
                 ? const Center(
-              child: Text('No transactions found'),
-            )
+                    child: CircularProgressIndicator(color: Color(0xFF53B175)),
+                  )
+                : _transactions.isEmpty
+                ? const Center(child: Text('No transactions found'))
                 : SizedBox(
-              height: 300,
-              child: ListView.builder(
-                itemCount: _transactions.length,
-                itemBuilder: (context, index) {
-                  final transaction = _transactions[index];
-                  final amount = (transaction['amount'] as num).toDouble();
-                  final type = transaction['transaction_type'] as String;
-                  final description = transaction['description'] as String? ?? '';
-                  final establishment = transaction['establishments'] != null
-                      ? (transaction['establishments'] as Map<String, dynamic>)['name'] as String?
-                      : null;
+                    height: 300,
+                    child: ListView.builder(
+                      itemCount: _transactions.length,
+                      itemBuilder: (context, index) {
+                        final transaction = _transactions[index];
+                        final amount = (transaction['amount'] as num)
+                            .toDouble();
+                        final type = transaction['transaction_type'] as String;
+                        final description =
+                            transaction['description'] as String? ?? '';
+                        final establishment =
+                            transaction['establishments'] != null
+                            ? (transaction['establishments']
+                                      as Map<String, dynamic>)['name']
+                                  as String?
+                            : null;
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        type == 'credit' ? Icons.add_circle : Icons.remove_circle,
-                        color: type == 'credit' ? Colors.green : Colors.red,
-                      ),
-                      title: Text(description),
-                      subtitle: establishment != null
-                          ? Text(establishment)
-                          : null,
-                      trailing: Text(
-                        '${type == 'credit' ? '+' : '-'}${amount.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          color: type == 'credit' ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: Icon(
+                              type == 'credit'
+                                  ? Icons.add_circle
+                                  : Icons.remove_circle,
+                              color: type == 'credit'
+                                  ? Colors.green
+                                  : Colors.red,
+                            ),
+                            title: Text(description),
+                            subtitle: establishment != null
+                                ? Text(establishment)
+                                : null,
+                            trailing: Text(
+                              '${type == 'credit' ? '+' : '-'}${amount.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                color: type == 'credit'
+                                    ? Colors.green
+                                    : Colors.red,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
-            ),
+                  ),
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
@@ -590,89 +625,98 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
         elevation: 0,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF53B175)))
-          : _orders.isEmpty
           ? const Center(
-        child: Text('No orders found'),
-      )
+              child: CircularProgressIndicator(color: Color(0xFF53B175)),
+            )
+          : _orders.isEmpty
+          ? const Center(child: Text('No orders found'))
           : ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _orders.length,
-        itemBuilder: (context, index) {
-          final order = _orders[index];
-          final orderId = order['id'] as String;
-          final totalAmount = (order['total_amount'] as num).toDouble();
-          final status = order['status'] as String;
-          final createdAt = DateTime.parse(order['created_at'] as String);
-          final establishment = order['establishments'] != null
-              ? (order['establishments'] as Map<String, dynamic>)['name'] as String?
-              : 'Unknown Establishment';
-          final orderItems = order['order_items'] as List? ?? [];
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Order #${orderId.substring(0, 8)}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+              itemCount: _orders.length,
+              itemBuilder: (context, index) {
+                final order = _orders[index];
+                final orderId = order['id'] as String;
+                final totalAmount = (order['total_amount'] as num).toDouble();
+                final status = order['status'] as String;
+                final createdAt = DateTime.parse(order['created_at'] as String);
+                final establishment = order['establishments'] != null
+                    ? (order['establishments'] as Map<String, dynamic>)['name']
+                          as String?
+                    : 'Unknown Establishment';
+                final orderItems = order['order_items'] as List? ?? [];
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Order #${orderId.substring(0, 8)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getStatusColor(
+                                  status,
+                                ).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                status.toUpperCase(),
+                                style: TextStyle(
+                                  color: _getStatusColor(status),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(status).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
+                        const SizedBox(height: 8),
+                        Text(
+                          establishment ?? 'Unknown Establishment',
+                          style: TextStyle(color: Colors.grey[600]),
                         ),
-                        child: Text(
-                          status.toUpperCase(),
-                          style: TextStyle(
-                            color: _getStatusColor(status),
-                            fontSize: 12,
+                        const SizedBox(height: 8),
+                        Text(
+                          '${totalAmount.toStringAsFixed(0)} MWK',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
+                            color: Color(0xFF53B175),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    establishment ?? 'Unknown Establishment',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${totalAmount.toStringAsFixed(0)} MWK',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF53B175),
+                        const SizedBox(height: 8),
+                        if (orderItems.isNotEmpty)
+                          Text(
+                            '${orderItems.length} item(s)',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}',
+                          style: TextStyle(
+                            color: Colors.grey[500],
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  if (orderItems.isNotEmpty)
-                    Text(
-                      '${orderItems.length} item(s)',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${createdAt.day}/${createdAt.month}/${createdAt.year} ${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
-          );
-        },
-      ),
     );
   }
 }
@@ -702,8 +746,12 @@ class _UserDetailsDialogState extends State<UserDetailsDialog> {
   @override
   void initState() {
     super.initState();
-    _fullNameController = TextEditingController(text: widget.userData?['full_name'] ?? '');
-    _phoneController = TextEditingController(text: widget.userData?['phone'] ?? '');
+    _fullNameController = TextEditingController(
+      text: widget.userData?['full_name'] ?? '',
+    );
+    _phoneController = TextEditingController(
+      text: widget.userData?['phone'] ?? '',
+    );
   }
 
   @override
@@ -721,10 +769,10 @@ class _UserDetailsDialogState extends State<UserDetailsDialog> {
           await widget.supabaseService.client
               .from('users')
               .update({
-            'full_name': _fullNameController.text,
-            'phone': _phoneController.text,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
+                'full_name': _fullNameController.text,
+                'phone': _phoneController.text,
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              })
               .eq('id', user.id);
 
           widget.onUpdate();

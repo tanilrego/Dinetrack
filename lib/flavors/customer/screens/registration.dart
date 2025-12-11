@@ -45,11 +45,25 @@ class _RegisterPageState extends State<RegisterPage> {
       final AuthResponse authResponse = await _supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
+        data: {
+          'full_name': _nameController.text.trim(),
+          'user_type': 'customer',
+        },
       );
 
       final user = authResponse.user;
 
       if (user != null) {
+        // Explicitly create user profile in public.users table
+        await _supabase.from('users').upsert({
+          'id': user.id,
+          'email': _emailController.text.trim(),
+          'full_name': _nameController.text.trim(),
+          'user_type': 'customer',
+          'dine_coins_balance': 0.00,
+          'created_at': DateTime.now().toIso8601String(),
+        });
+
         _showInfoDialog(
           'Registration successful! Please check your email and confirm your account before logging in.',
         );

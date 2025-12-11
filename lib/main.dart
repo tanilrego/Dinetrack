@@ -62,15 +62,27 @@ String? _getEstablishmentIdFromUrl() {
 
   try {
     final hash = html.window.location.hash;
+    debugPrint('DEBUG: Current URL Hash: $hash');
+
     if (hash.isEmpty) return null;
 
     // Parse hash like #/restaurant/{establishment_id}
-    // Handles simple ID or ID followed by query params (e.g. ?status=success)
     final regex = RegExp(r'#/restaurant/([a-f0-9-]+)', caseSensitive: false);
     final match = regex.firstMatch(hash);
 
     if (match != null && match.groupCount >= 1) {
-      return match.group(1);
+      final id = match.group(1);
+      debugPrint('DEBUG: Extracted Establishment ID: $id');
+
+      // If we successfully got an ID from URL, clear any stale pending payment ID
+      // from storage to avoid confusion later.
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.remove('pending_payment_restaurant_id');
+      });
+
+      return id;
+    } else {
+      debugPrint('DEBUG: No ID match found in hash');
     }
   } catch (e) {
     debugPrint('Error parsing URL: $e');
