@@ -6,6 +6,8 @@ import 'profile_screen.dart';
 import '../../../../core/widgets/paychangu_checkout.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class CustomerNavigation extends StatefulWidget {
   final String establishmentId;
@@ -275,6 +277,15 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
 
         final paymentData = paymentResponse.data;
         final checkoutUrl = paymentData['checkout_url'] as String? ?? '';
+
+        // Save establishment ID to storage in case return URL hash is stripped
+        if (kIsWeb) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+            'pending_payment_restaurant_id',
+            widget.establishmentId,
+          );
+        }
 
         // Navigate to PayChangu payment screen
         if (mounted) {
