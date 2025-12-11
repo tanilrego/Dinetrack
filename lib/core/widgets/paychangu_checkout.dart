@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webview_flutter/webview_flutter.dart';
-// Import for platform view registry on web if needed, but handled by plugin mostly.
+import 'package:url_launcher/url_launcher.dart';
 
 class PayChanguCheckout extends StatefulWidget {
   final String checkoutUrl;
@@ -21,48 +22,73 @@ class PayChanguCheckout extends StatefulWidget {
 }
 
 class _PayChanguCheckoutState extends State<PayChanguCheckout> {
-  late final WebViewController _controller;
+  WebViewController? _controller;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
 
-    // Initialize WebViewController
+    if (kIsWeb) {
+      // WEB: Use redirect (Same Tab) because payment gateways often block iframes (X-Frame-Options)
+      _launchWebPayment();
+    } else {
+      // MOBILE: Use in-app WebView
+      _initializeMobileWebView();
+    }
+  }
+
+  Future<void> _launchWebPayment() async {
+    final uri = Uri.parse(widget.checkoutUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(
+        uri,
+        mode: LaunchMode
+            .platformDefault, // Opens in same tab (replaces current page)
+        webOnlyWindowName: '_self', // Explicitly target same window
+      );
+      // We don't pop here because the page will unload.
+      // When the user returns, the App/Router state handles the result.
+    } else {
+      widget.onError();
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  void _initializeMobileWebView() {
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setNavigationDelegate(
         NavigationDelegate(
           onNavigationRequest: (request) {
             final url = request.url;
-
             debugPrint("PayChangu URL: $url");
 
             // Detect success
             if (url.contains("success") || url.contains("paid")) {
               widget.onSuccess();
-              Navigator.pop(context);
+              if (mounted) Navigator.pop(context);
               return NavigationDecision.prevent;
             }
 
             // Detect cancel
             if (url.contains("cancel") || url.contains("failed")) {
               widget.onCancel();
-              Navigator.pop(context);
+              if (mounted) Navigator.pop(context);
               return NavigationDecision.prevent;
             }
 
             // Detect error
             if (url.contains("error")) {
               widget.onError();
-              Navigator.pop(context);
+              if (mounted) Navigator.pop(context);
               return NavigationDecision.prevent;
             }
 
             return NavigationDecision.navigate;
           },
           onPageFinished: (_) {
-            setState(() => _loading = false);
+            if (mounted) setState(() => _loading = false);
           },
         ),
       )
@@ -71,6 +97,23 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
 
   @override
   Widget build(BuildContext context) {
+    // Web Layout
+    if (kIsWeb) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text("Redirecting to PayChangu..."),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Mobile Layout
     return Scaffold(
       appBar: AppBar(
         title: const Text("Complete Payment"),
@@ -84,8 +127,7 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
       ),
       body: Stack(
         children: [
-          WebViewWidget(controller: _controller),
-
+          if (_controller != null) WebViewWidget(controller: _controller!),
           if (_loading) const Center(child: CircularProgressIndicator()),
         ],
       ),
