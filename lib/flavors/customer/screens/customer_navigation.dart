@@ -255,7 +255,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
             'payer_customer_id': _supabaseService.client.auth.currentUser!.id,
             'amount': finalAmount,
             'return_url':
-                'https://dinetrack-3hhc.onrender.com/#/payment/success',
+                'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}',
           },
         );
 

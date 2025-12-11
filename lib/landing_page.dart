@@ -7,11 +7,10 @@ import 'package:dinetrack/flavors/customer/screens/customer_navigation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/supabase_service.dart';
 
-// Global variable to handle pending navigation after auth
-String? pendingEstablishmentId;
-
 class LandingPage extends StatefulWidget {
-  const LandingPage({super.key});
+  final String? pendingEstablishmentId;
+
+  const LandingPage({super.key, this.pendingEstablishmentId});
 
   @override
   State<LandingPage> createState() => _LandingPageState();
@@ -28,19 +27,23 @@ class _LandingPageState extends State<LandingPage> {
     super.initState();
     _fetchRestaurants();
 
-    // Check for pending navigation (e.g. after login or guest access)
-    if (pendingEstablishmentId != null) {
-      final estId = pendingEstablishmentId!;
-      pendingEstablishmentId = null; // Clear it
+    // Check for pending navigation (e.g. after login or guest access from deep link)
+    if (widget.pendingEstablishmentId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Double check auth just in case
-        if (Supabase.instance.client.auth.currentUser != null) {
+        // Navigate to restaurant if auth state changes and user is logged in
+        // This handles the case where user logs in while a deep link is pending
+        if (mounted && Supabase.instance.client.auth.currentUser != null) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CustomerNavigation(establishmentId: estId),
+              builder: (_) => CustomerNavigation(
+                establishmentId: widget.pendingEstablishmentId!,
+              ),
             ),
           );
+        } else if (mounted) {
+          // User is not logged in - show the auth dialog
+          _showAccessDialog(context, widget.pendingEstablishmentId!);
         }
       });
     }
@@ -580,8 +583,7 @@ class _LandingPageState extends State<LandingPage> {
                     height: 44,
                     child: ElevatedButton(
                       onPressed: () {
-                        // Set pending ID so LandingPage navigates after reload
-                        pendingEstablishmentId = establishmentId;
+                        // Navigate to login - deep link handled by URL on web
                         Navigator.pop(context);
                         Navigator.push(
                           context,
@@ -603,8 +605,7 @@ class _LandingPageState extends State<LandingPage> {
                     height: 44,
                     child: OutlinedButton(
                       onPressed: () {
-                        // Registration might take longer, but let's set it anyway
-                        pendingEstablishmentId = establishmentId;
+                        // Navigate to registration - deep link handled by URL on web
                         Navigator.pop(context);
                         Navigator.push(
                           context,
@@ -627,8 +628,7 @@ class _LandingPageState extends State<LandingPage> {
                     height: 44,
                     child: TextButton(
                       onPressed: () async {
-                        // Set pending ID
-                        pendingEstablishmentId = establishmentId;
+                        // Sign in as guest - deep link handled by AuthGate
                         Navigator.pop(context);
                         await _signInAsGuest();
 
