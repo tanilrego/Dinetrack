@@ -23,6 +23,7 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    pendingEstablishmentId = null; // Clear pending navigation
     await _supabase.client.auth.signOut();
   }
 }

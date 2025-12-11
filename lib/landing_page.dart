@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/supabase_service.dart';
 import 'core/services/auth_service.dart';
 import 'core/widgets/restaurant_details_dialog.dart';
+import 'core/widgets/sliding_image_animation.dart';
 
 class LandingPage extends StatefulWidget {
   final String? pendingEstablishmentId;
@@ -812,33 +813,9 @@ class _LandingPageState extends State<LandingPage> {
                       ),
                     ],
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(24),
-                    child: Image.asset(
-                      'assets/images/dyn.png',
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                const Color(0xFF4F46E5).withValues(alpha: 0.1),
-                                const Color(0xFF10B981).withValues(alpha: 0.1),
-                              ],
-                            ),
-                          ),
-                          child: const Center(
-                            child: Icon(
-                              Icons.restaurant,
-                              size: 120,
-                              color: Color(0xFF4F46E5),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                  child: const SlidingImageAnimation(
+                    imagePath: 'assets/images/delicious_food_spread.png',
+                    height: 550,
                   ),
                 ),
             ],
