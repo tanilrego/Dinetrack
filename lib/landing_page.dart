@@ -6,6 +6,7 @@ import 'package:dinetrack/flavors/customer/screens/registration.dart';
 import 'package:dinetrack/flavors/customer/screens/customer_navigation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/services/supabase_service.dart';
+import 'core/widgets/restaurant_details_dialog.dart';
 
 class LandingPage extends StatefulWidget {
   final String? pendingEstablishmentId;
@@ -22,28 +23,36 @@ class _LandingPageState extends State<LandingPage> {
   List<Map<String, dynamic>> _restaurants = [];
   bool _loadingRestaurants = true;
 
+  // Static variable to persist intended destination across auth rebuilds
+  static String? _redirectEstablishmentId;
+
   @override
   void initState() {
     super.initState();
     _fetchRestaurants();
 
-    // Check for pending navigation (e.g. after login or guest access from deep link)
-    if (widget.pendingEstablishmentId != null) {
+    // Check for pending navigation (from deep link OR internal redirect)
+    final targetId = widget.pendingEstablishmentId ?? _redirectEstablishmentId;
+
+    if (targetId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        // Navigate to restaurant if auth state changes and user is logged in
-        // This handles the case where user logs in while a deep link is pending
-        if (mounted && Supabase.instance.client.auth.currentUser != null) {
+        // Clear the redirect id to prevent loops if we strictly needed to,
+        // but keeping it until success is safer?
+        // For now, let's assume we consume it.
+
+        final user = Supabase.instance.client.auth.currentUser;
+        if (mounted && user != null) {
+          _redirectEstablishmentId = null; // Consumed
+
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => CustomerNavigation(
-                establishmentId: widget.pendingEstablishmentId!,
-              ),
+              builder: (_) => CustomerNavigation(establishmentId: targetId),
             ),
           );
-        } else if (mounted) {
-          // User is not logged in - show the auth dialog
-          _showAccessDialog(context, widget.pendingEstablishmentId!);
+        } else if (mounted && widget.pendingEstablishmentId != null) {
+          // Only show auth dialog automatically if it came from a deep link (widget param)
+          _showAccessDialog(context, targetId);
         }
       });
     }
@@ -83,7 +92,11 @@ class _LandingPageState extends State<LandingPage> {
     }
   }
 
-  Future<void> _signInAsGuest() async {
+  Future<void> _signInAsGuest(String? targetEstablishmentId) async {
+    if (targetEstablishmentId != null) {
+      _redirectEstablishmentId = targetEstablishmentId;
+    }
+
     setState(() {
       _busy = true;
       _errorMessage = null;
@@ -111,6 +124,7 @@ class _LandingPageState extends State<LandingPage> {
       });
     } catch (e) {
       setState(() => _errorMessage = "Guest login failed: $e");
+      _redirectEstablishmentId = null;
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -257,7 +271,7 @@ class _LandingPageState extends State<LandingPage> {
             const SizedBox(width: 12),
             ElevatedButton.icon(
               onPressed: () {
-                _showLoginDialog(context);
+                _showLoginDialog(context, null);
               },
               icon: const Icon(Icons.login, size: 20),
               label: const Text('Login'),
@@ -406,7 +420,7 @@ class _LandingPageState extends State<LandingPage> {
               child: ElevatedButton.icon(
                 onPressed: () {
                   Navigator.pop(context);
-                  _showLoginDialog(context);
+                  _showLoginDialog(context, null);
                 },
                 icon: const Icon(Icons.login),
                 label: const Text('Login'),
@@ -427,7 +441,7 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
-  void _showLoginDialog(BuildContext context) {
+  void _showLoginDialog(BuildContext context, String? targetEstablishmentId) {
     final isMobile = MediaQuery.of(context).size.width < 768;
 
     showDialog(
@@ -507,7 +521,8 @@ class _LandingPageState extends State<LandingPage> {
                   color: const Color(0xFF8B5CF6),
                   onTap: () {
                     Navigator.pop(context);
-                    _signInAsGuest();
+                    Navigator.pop(context);
+                    _signInAsGuest(targetEstablishmentId);
                   },
                 ),
                 const SizedBox(height: 16),
@@ -628,23 +643,9 @@ class _LandingPageState extends State<LandingPage> {
                     height: 44,
                     child: TextButton(
                       onPressed: () async {
-                        // Sign in as guest - deep link handled by AuthGate
+                        // Sign in as guest
                         Navigator.pop(context);
-                        await _signInAsGuest();
-
-                        // If auth succeeded, the app might rebuild via AuthGate -> LandingPage -> initState -> Navigate
-                        // Or if it doesn't rebuild, we navigate here manually:
-                        if (mounted &&
-                            Supabase.instance.client.auth.currentUser != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => CustomerNavigation(
-                                establishmentId: establishmentId,
-                              ),
-                            ),
-                          );
-                        }
+                        await _signInAsGuest(establishmentId);
                       },
                       child: const Text('Continue as Guest'),
                     ),
@@ -1003,31 +1004,45 @@ class _LandingPageState extends State<LandingPage> {
     );
   }
 
+  void _openRestaurantDetails(Map<String, dynamic> restaurant) {
+    showDialog(
+      context: context,
+      builder: (context) => RestaurantDetailsDialog(
+        restaurant: restaurant,
+        onVisitPressed: () {
+          Navigator.pop(context); // Close details dialog
+
+          final establishmentId = restaurant['id'];
+          final user = Supabase.instance.client.auth.currentUser;
+
+          if (user != null) {
+            // Authenticated -> Go to Menu/Customer App
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    CustomerNavigation(establishmentId: establishmentId),
+              ),
+            );
+          } else {
+            // Unauthenticated -> Show Dialog
+            _showAccessDialog(context, establishmentId);
+          }
+        },
+      ),
+    );
+  }
+
   Widget _buildRestaurantCard(Map<String, dynamic> restaurant, bool isMobile) {
     final name = restaurant['name'] ?? 'Unknown Restaurant';
     final type = restaurant['type'] ?? 'Restaurant';
     final address = restaurant['address'] ?? 'No address provided';
     final description = restaurant['description'] ?? 'No description available';
     final imageUrl = restaurant['image_url'];
-    final establishmentId = restaurant['id'] ?? '';
+    // final establishmentId = restaurant['id'] ?? ''; // used internally by helper now
 
     return GestureDetector(
-      onTap: () {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user != null) {
-          // Authenticated -> Go to Menu/Customer App
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) =>
-                  CustomerNavigation(establishmentId: establishmentId),
-            ),
-          );
-        } else {
-          // Unauthenticated -> Show Dialog
-          _showAccessDialog(context, establishmentId);
-        }
-      },
+      onTap: () => _openRestaurantDetails(restaurant),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -1180,24 +1195,7 @@ class _LandingPageState extends State<LandingPage> {
                           ? 40
                           : 48, // Fixed height for button to match design
                       child: ElevatedButton(
-                        onPressed: () {
-                          final user =
-                              Supabase.instance.client.auth.currentUser;
-                          if (user != null) {
-                            // Authenticated -> Go to Menu/Customer App
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => CustomerNavigation(
-                                  establishmentId: establishmentId,
-                                ),
-                              ),
-                            );
-                          } else {
-                            // Unauthenticated -> Show Dialog
-                            _showAccessDialog(context, establishmentId);
-                          }
-                        },
+                        onPressed: () => _openRestaurantDetails(restaurant),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF10B981),
                           foregroundColor: Colors.white,
