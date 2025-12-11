@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/models/menu_models.dart';
 
-class CartScreen extends StatelessWidget {
+class CartScreen extends StatefulWidget {
   final String establishmentId;
   final Map<String, CartItem> cartItems;
   final Function(String, int) onUpdateQuantity;
@@ -9,7 +9,6 @@ class CartScreen extends StatelessWidget {
   final Function() onClearCart;
   final double cartTotal;
   final Function() onCheckout;
-  final Color _primaryGreen = const Color(0xFF2196F3);
 
   const CartScreen({
     super.key,
@@ -21,6 +20,13 @@ class CartScreen extends StatelessWidget {
     required this.cartTotal,
     required this.onCheckout,
   });
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  final Color _primaryGreen = const Color(0xFF2196F3);
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +45,7 @@ class CartScreen extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (cartItems.isNotEmpty)
+          if (widget.cartItems.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.clear_all, color: Colors.grey),
               onPressed: () => _showClearCartDialog(context),
@@ -49,14 +55,14 @@ class CartScreen extends StatelessWidget {
       body: Column(
         children: [
           Expanded(
-            child: cartItems.isEmpty
+            child: widget.cartItems.isEmpty
                 ? _buildEmptyCart()
                 : ListView.separated(
                     padding: const EdgeInsets.all(20),
-                    itemCount: cartItems.length,
+                    itemCount: widget.cartItems.length,
                     separatorBuilder: (_, __) => const Divider(height: 30),
                     itemBuilder: (context, index) {
-                      final cartItem = cartItems.values.elementAt(index);
+                      final cartItem = widget.cartItems.values.elementAt(index);
                       final menuItem = cartItem.menuItem;
                       final quantity = cartItem.quantity;
                       final price = menuItem.price;
@@ -74,7 +80,7 @@ class CartScreen extends StatelessWidget {
                   ),
           ),
           // Checkout Section
-          if (cartItems.isNotEmpty) _buildCheckoutSection(context),
+          if (widget.cartItems.isNotEmpty) _buildCheckoutSection(context),
         ],
       ),
     );
@@ -129,7 +135,7 @@ class CartScreen extends StatelessWidget {
         return await _showDeleteConfirmationDialog(context, menuItem.name);
       },
       onDismissed: (direction) {
-        onRemoveFromCart(menuItem.id);
+        widget.onRemoveFromCart(menuItem.id);
         _showSnackBar(context, '${menuItem.name} removed from cart');
       },
       child: Container(
@@ -256,8 +262,12 @@ class CartScreen extends StatelessWidget {
                             _buildQuantityButton(Icons.remove, () {
                               // Get fresh quantity from cart state
                               final currentQty =
-                                  cartItems[menuItem.id]?.quantity ?? 1;
-                              onUpdateQuantity(menuItem.id, currentQty - 1);
+                                  widget.cartItems[menuItem.id]?.quantity ?? 1;
+                              widget.onUpdateQuantity(
+                                menuItem.id,
+                                currentQty - 1,
+                              );
+                              setState(() {}); // Force UI update
                             }, enabled: quantity > 1),
                             Padding(
                               padding: const EdgeInsets.symmetric(
@@ -274,8 +284,12 @@ class CartScreen extends StatelessWidget {
                             _buildQuantityButton(Icons.add, () {
                               // Get fresh quantity from cart state
                               final currentQty =
-                                  cartItems[menuItem.id]?.quantity ?? 1;
-                              onUpdateQuantity(menuItem.id, currentQty + 1);
+                                  widget.cartItems[menuItem.id]?.quantity ?? 1;
+                              widget.onUpdateQuantity(
+                                menuItem.id,
+                                currentQty + 1,
+                              );
+                              setState(() {}); // Force UI update
                             }),
                           ],
                         ),
@@ -362,13 +376,13 @@ class CartScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  _buildSummaryRow('Subtotal', cartTotal),
+                  _buildSummaryRow('Subtotal', widget.cartTotal),
                   const SizedBox(height: 8),
-                  _buildSummaryRow('Tax', _calculateTax(cartTotal)),
+                  _buildSummaryRow('Tax', _calculateTax(widget.cartTotal)),
                   const Divider(height: 20),
                   _buildSummaryRow(
                     'Total Amount',
-                    cartTotal + _calculateTax(cartTotal),
+                    widget.cartTotal + _calculateTax(widget.cartTotal),
                     isTotal: true,
                   ),
                 ],
@@ -382,7 +396,7 @@ class CartScreen extends StatelessWidget {
               height: 56,
               child: ElevatedButton(
                 onPressed: () {
-                  onCheckout();
+                  widget.onCheckout();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primaryGreen,
@@ -485,7 +499,7 @@ class CartScreen extends StatelessWidget {
           ),
           TextButton(
             onPressed: () {
-              onClearCart();
+              widget.onClearCart();
               Navigator.pop(context);
               _showSnackBar(context, 'Cart cleared successfully');
             },

@@ -30,28 +30,8 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
   @override
   void initState() {
     super.initState();
-    if (kIsWeb) {
-      _handleWebPayment();
-    } else {
-      _initializeWebView();
-    }
-  }
-
-  void _handleWebPayment() async {
-    // Navigate to payment in the same window instead of opening new tab
-    if (await canLaunchUrl(Uri.parse(widget.checkoutUrl))) {
-      await launchUrl(
-        Uri.parse(widget.checkoutUrl),
-        mode: LaunchMode.platformDefault, // Use same window/tab
-      );
-      // The payment page will redirect back to the restaurant via return URL
-      // Close this checkout screen
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
-    } else {
-      widget.onError();
-    }
+    // Initialize WebView for both mobile AND web
+    _initializeWebView();
   }
 
   void _initializeWebView() {
@@ -72,7 +52,6 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
           },
           onWebResourceError: (WebResourceError error) {
             debugPrint('WebView error: ${error.description}');
-            // Don't error immediately on resource errors mostly, but log it
           },
           onNavigationRequest: (NavigationRequest request) {
             _handleUrlChange(request.url);
@@ -108,36 +87,17 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
-      // On web, we navigate to payment in the same window
-      // Show processing screen while navigation happens
-      return Scaffold(
-        appBar: AppBar(title: const Text('Processing Payment')),
-        body: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 24),
-              Text(
-                'Redirecting to payment gateway...',
-                style: TextStyle(fontSize: 16),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+    // Use WebView for ALL platforms (mobile and web)
     return Scaffold(
       appBar: AppBar(
         title: const Text('Complete Payment'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.open_in_browser),
-            onPressed: _openInBrowser,
-            tooltip: 'Open in browser',
-          ),
+          if (!kIsWeb)
+            IconButton(
+              icon: const Icon(Icons.open_in_browser),
+              onPressed: _openInBrowser,
+              tooltip: 'Open in browser',
+            ),
         ],
       ),
       body: Stack(
