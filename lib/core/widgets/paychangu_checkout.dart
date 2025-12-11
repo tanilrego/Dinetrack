@@ -38,12 +38,17 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
   }
 
   void _handleWebPayment() async {
+    // Navigate to payment in the same window instead of opening new tab
     if (await canLaunchUrl(Uri.parse(widget.checkoutUrl))) {
       await launchUrl(
         Uri.parse(widget.checkoutUrl),
-        mode: LaunchMode.externalApplication, // New tab/window
-        webOnlyWindowName: '_blank',
+        mode: LaunchMode.platformDefault, // Use same window/tab
       );
+      // The payment page will redirect back to the restaurant via return URL
+      // Close this checkout screen
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     } else {
       widget.onError();
     }
@@ -104,36 +109,19 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
   @override
   Widget build(BuildContext context) {
     if (kIsWeb) {
+      // On web, we navigate to payment in the same window
+      // Show processing screen while navigation happens
       return Scaffold(
-        appBar: AppBar(title: const Text('Complete Payment')),
-        body: Center(
+        appBar: AppBar(title: const Text('Processing Payment')),
+        body: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.payment, size: 64, color: Colors.blue),
-              const SizedBox(height: 24),
-              const Text(
-                'Payment opened in new tab',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              const Text('Please complete the payment in the browser window.'),
-              const SizedBox(height: 32),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  OutlinedButton(
-                    onPressed: widget.onCancel,
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed:
-                        widget.onSuccess, // Optimistic success or check status?
-                    // Ideally we should check status here, but for now user confirmation
-                    child: const Text('I have completed payment'),
-                  ),
-                ],
+              CircularProgressIndicator(),
+              SizedBox(height: 24),
+              Text(
+                'Redirecting to payment gateway...',
+                style: TextStyle(fontSize: 16),
               ),
             ],
           ),

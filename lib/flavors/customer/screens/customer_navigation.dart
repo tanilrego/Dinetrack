@@ -122,18 +122,28 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
 
   // Update cart item quantity
   void _updateCartQuantity(String menuItemId, int newQuantity) {
+    debugPrint(
+      'DEBUG: Updating quantity for $menuItemId from ${_cartItems[menuItemId]?.quantity} to $newQuantity',
+    );
     setState(() {
       if (newQuantity <= 0) {
         _cartItems.remove(menuItemId);
+        debugPrint('DEBUG: Removed item $menuItemId from cart');
       } else {
         _cartItems[menuItemId] = CartItem(
           menuItem: _cartItems[menuItemId]!.menuItem,
           quantity: newQuantity,
           specialInstructions: _cartItems[menuItemId]!.specialInstructions,
         );
+        debugPrint(
+          'DEBUG: Updated item $menuItemId quantity to ${_cartItems[menuItemId]!.quantity}',
+        );
       }
       _calculateCartTotal();
     });
+    debugPrint(
+      'DEBUG: Cart now has ${_cartItems.length} items, total: $_cartTotal',
+    );
   }
 
   // Remove from cart
