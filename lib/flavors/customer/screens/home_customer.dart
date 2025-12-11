@@ -195,13 +195,26 @@ class _HomeCustomerState extends State<HomeCustomer> {
               );
             }
             final establishmentName = snapshot.data?['name'] ?? 'DineTrack';
-            return Text(
-              establishmentName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  establishmentName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+                if (widget.establishmentId.isNotEmpty)
+                  Text(
+                    'ID: ${widget.establishmentId.substring(0, 8)}...',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.7),
+                      fontSize: 10,
+                    ),
+                  ),
+              ],
             );
           },
         ),
