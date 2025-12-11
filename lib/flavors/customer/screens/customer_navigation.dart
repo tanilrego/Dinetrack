@@ -40,6 +40,27 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     super.initState();
     _resolveTableId();
     _calculateCartTotal();
+
+    // Check for payment return success (Web Redirect)
+    if (kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        // Simple check: if current URL has 'tx_ref', show success message.
+        // In a real app, you'd verify this ref with the backend.
+        final uri = Uri.base;
+        if (uri.queryParameters.containsKey('tx_ref') ||
+            uri.queryParameters.containsKey('status')) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Payment Successful!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 5),
+            ),
+          );
+          // Optional: clear query params to avoid showing message on refresh?
+          // Hard to do without reloading on web, but this is sufficient for user feedback.
+        }
+      });
+    }
   }
 
   // Calculate cart total
@@ -664,7 +685,7 @@ class CheckoutDialog extends StatefulWidget {
 }
 
 class _CheckoutDialogState extends State<CheckoutDialog> {
-  String _selectedPaymentMethod = 'cash';
+  String _selectedPaymentMethod = 'paychangu';
   double _dineCoinsUsed = 0.0;
   final TextEditingController _dineCoinsController = TextEditingController();
 
@@ -724,23 +745,17 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
             ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
-              segments: [
-                const ButtonSegment<String>(
-                  value: 'cash',
-                  label: Text('Cash'),
-                  icon: Icon(Icons.attach_money),
-                ),
-                const ButtonSegment<String>(
+              segments: const [
+                ButtonSegment<String>(
                   value: 'paychangu',
                   label: Text('PayChangu'),
                   icon: Icon(Icons.credit_card),
                 ),
-                if (widget.canUseDineCoins)
-                  const ButtonSegment<String>(
-                    value: 'dine_coins',
-                    label: Text('DineCoins'),
-                    icon: Icon(Icons.account_balance_wallet),
-                  ),
+                ButtonSegment<String>(
+                  value: 'dine_coins',
+                  label: Text('DineCoins'),
+                  icon: Icon(Icons.account_balance_wallet),
+                ),
               ],
               selected: {_selectedPaymentMethod},
               onSelectionChanged: (Set<String> newSelection) {
