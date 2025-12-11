@@ -89,22 +89,45 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   String? _pendingEstablishmentId;
+  bool _isRestoringSession =
+      kIsWeb; // Only block on Web where storage check is needed
 
   @override
   void initState() {
     super.initState();
-    // Check for deep link on initialization
-    _pendingEstablishmentId = _getEstablishmentIdFromUrl();
+    _initApp();
+  }
 
-    // Safety Net: Re-hydrate the static persistence if we found an ID in the URL
-    // This ensures that deep down in the app, AuthService knows where we aim to be.
-    if (_pendingEstablishmentId != null) {
-      AuthService.pendingEstablishmentId = _pendingEstablishmentId;
+  Future<void> _initApp() async {
+    // 1. Try to get ID from URL first
+    String? id = _getEstablishmentIdFromUrl();
+
+    // 2. If URL failed (e.g. hash stripped by PayChangu), check Storage (Web only)
+    if (id == null && kIsWeb) {
+      final prefs = await SharedPreferences.getInstance();
+      id = prefs.getString('pending_payment_restaurant_id');
+    }
+
+    // 3. Set state and unblock
+    if (mounted) {
+      setState(() {
+        if (id != null) {
+          AuthService.pendingEstablishmentId = id;
+          _pendingEstablishmentId = id;
+        }
+        _isRestoringSession = false; // Done checking
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Block rendering until we've checked storage to prevent RoleBasedRouter
+    // from seeing "No ID" and auto-logging out the user prematurely.
+    if (_isRestoringSession) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return StreamBuilder<AuthState>(
       stream: SupabaseService().authStateChanges,
       builder: (context, snapshot) {
