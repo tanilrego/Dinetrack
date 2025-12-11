@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:html' as html show window;
 
 import 'core/services/supabase_service.dart';
+import 'core/services/auth_service.dart';
 import 'core/routing/role_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_web/webview_flutter_web.dart';
@@ -63,6 +64,7 @@ String? _getEstablishmentIdFromUrl() {
     if (hash.isEmpty) return null;
 
     // Parse hash like #/restaurant/{establishment_id}
+    // Handles simple ID or ID followed by query params (e.g. ?status=success)
     final regex = RegExp(r'#/restaurant/([a-f0-9-]+)', caseSensitive: false);
     final match = regex.firstMatch(hash);
 
@@ -92,6 +94,12 @@ class _AuthGateState extends State<AuthGate> {
     super.initState();
     // Check for deep link on initialization
     _pendingEstablishmentId = _getEstablishmentIdFromUrl();
+
+    // Safety Net: Re-hydrate the static persistence if we found an ID in the URL
+    // This ensures that deep down in the app, AuthService knows where we aim to be.
+    if (_pendingEstablishmentId != null) {
+      AuthService.pendingEstablishmentId = _pendingEstablishmentId;
+    }
   }
 
   @override
