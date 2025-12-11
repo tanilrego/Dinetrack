@@ -88,3 +88,4 @@ flutter:
     - assets/env/.env.production
     - assets/images/logo.png
     - assets/images/dyn.jpg
+    - assets/images/delicious_food_spread.png

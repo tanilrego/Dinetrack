@@ -99,13 +99,26 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         final authState = snapshot.data;
+        final event = authState?.event;
         final session = authState?.session;
+
+        // CRITICAL FIX: If user signs out, we must clear the pending ID
+        // to prevent LandingPage from auto-opening the restaurant dialog again.
+        if (event == AuthChangeEvent.signedOut) {
+          // We schedule this to avoid modifying state during build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (_pendingEstablishmentId != null) {
+              setState(() {
+                _pendingEstablishmentId = null;
+              });
+            }
+          });
+        }
 
         if (session == null) {
           return LandingPage(pendingEstablishmentId: _pendingEstablishmentId);
         }
 
-        // Pass the pending ID to the router so the LandingPage can show the dialog
         return RoleBasedRouter(
           userId: session.user.id,
           pendingEstablishmentId: _pendingEstablishmentId,
