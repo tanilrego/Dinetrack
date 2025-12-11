@@ -34,7 +34,7 @@ class MenuScreen extends StatefulWidget {
 
 class _MenuScreenState extends State<MenuScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF2196F3); // Changed to Blue
+  final Color _primaryColor = const Color(0xFF4F46E5); // Premium Indigo Blue
   final Color _lightGrey = const Color(0xFFF2F3F2);
   final Color _darkGrey = const Color(0xFF7C7C7C);
 
@@ -392,7 +392,7 @@ class _MenuScreenState extends State<MenuScreen> {
           'Menu',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
-        backgroundColor: _primaryGreen,
+        backgroundColor: _primaryColor,
         foregroundColor: Colors.white,
         actions: [
           Stack(
@@ -489,7 +489,7 @@ class _MenuScreenState extends State<MenuScreen> {
           ElevatedButton(
             onPressed: _loadData,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryGreen,
+              backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
             ),
             child: const Text('Try Again'),
@@ -628,10 +628,10 @@ class _MenuScreenState extends State<MenuScreen> {
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: isSelected ? _primaryGreen : _lightGrey,
+          color: isSelected ? _primaryColor : _lightGrey,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? _primaryGreen : Colors.transparent,
+            color: isSelected ? _primaryColor : Colors.transparent,
           ),
         ),
         child: Column(
@@ -747,7 +747,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: _primaryGreen,
+                        color: _primaryColor,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
@@ -796,7 +796,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: _primaryGreen,
+                            color: _primaryColor,
                           ),
                         ),
                         InkWell(
@@ -805,7 +805,7 @@ class _MenuScreenState extends State<MenuScreen> {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: _primaryGreen,
+                              color: _primaryColor,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
@@ -847,7 +847,7 @@ class _MenuScreenState extends State<MenuScreen> {
           ElevatedButton(
             onPressed: _clearSearch,
             style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryGreen,
+              backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
             ),
             child: const Text('Clear Search'),

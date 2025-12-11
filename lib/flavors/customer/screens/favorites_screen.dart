@@ -13,7 +13,7 @@ class FavoritesScreen extends StatefulWidget {
 
 class _FavoritesScreenState extends State<FavoritesScreen> {
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF53B175);
+  final Color _primaryColor = const Color(0xFF4F46E5);
   final Color _lightGrey = const Color(0xFFF2F3F2);
   final Color _darkGrey = const Color(0xFF7C7C7C);
 
@@ -121,7 +121,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text('Removed ${item.name} from favorites'),
-              backgroundColor: _primaryGreen,
+              backgroundColor: _primaryColor,
               duration: const Duration(seconds: 2),
             ),
           );
@@ -256,7 +256,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _clearSearch,
-              style: ElevatedButton.styleFrom(backgroundColor: _primaryGreen),
+              style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
               child: const Text(
                 'Clear Search',
                 style: TextStyle(color: Colors.white),
@@ -356,7 +356,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
-                            color: _primaryGreen,
+                            color: _primaryColor,
                           ),
                         ),
                         SizedBox(
@@ -366,7 +366,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                             onPressed: () =>
                                 widget.onAddToCart(item, quantity: 1),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: _primaryGreen,
+                              backgroundColor: _primaryColor,
                               padding: EdgeInsets.zero,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
@@ -434,7 +434,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _primaryGreen,
+                  color: _primaryColor,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(

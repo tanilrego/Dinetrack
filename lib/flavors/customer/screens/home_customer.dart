@@ -41,20 +41,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
     _loadData();
     _searchController.addListener(_onSearchChanged);
 
-    // DEBUG: Check the establishment ID
-    // print('🚨 HomeCustomer - Establishment ID: "${widget.establishmentId}"');
-    // print('🚨 HomeCustomer - ID Length: ${widget.establishmentId.length}');
-    // print('🚨 HomeCustomer - Is Empty: ${widget.establishmentId.isEmpty}');
-
-    // If ID is empty, show an error immediately
     if (widget.establishmentId.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _showEmptyEstablishmentError();
       });
     }
-
-    _loadData();
-    _searchController.addListener(_onSearchChanged);
   }
 
   void _showEmptyEstablishmentError() {
@@ -76,9 +67,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
   }
 
   final SupabaseService _supabaseService = SupabaseService();
-  final Color _primaryGreen = const Color(0xFF2196F3); // Changed to Blue
-  final Color _lightGrey = const Color(0xFFF2F3F2);
-  final Color _darkGrey = const Color(0xFF7C7C7C);
+  final Color _primaryColor = const Color(0xFF4F46E5); // Premium Blue/Indigo
+  final Color _lightGrey = const Color(0xFFF9FAFB);
+  final Color _darkGrey = const Color(0xFF6B7280);
 
   Future<List<AppCategory>> _categoriesFuture = Future.value([]);
   Future<List<MenuItem>> _bestsellersFuture = Future.value([]);
@@ -100,9 +91,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
   void _loadData() {
     setState(() {
-      _categoriesFuture = _supabaseService.getCategories(
-        //establishmentId: widget.establishmentId,
-      );
+      _categoriesFuture = _supabaseService.getCategories();
       _bestsellersFuture = _supabaseService.getBestsellers(
         establishmentId: widget.establishmentId,
       );
@@ -144,7 +133,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
         _searchResults = results;
       });
     } catch (e) {
-      // debugPrint('Search error: $e');
+      // Handle error silently
     }
   }
 
@@ -189,10 +178,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        elevation: 0,
         title: FutureBuilder<Map<String, dynamic>?>(
           future: _establishmentFuture,
           builder: (context, snapshot) {
-            // Handle error gracefully to prevent crash
             if (snapshot.hasError) return const Text('DineTrack');
             final establishmentName = snapshot.data?['name'] ?? 'DineTrack';
             return Text(
@@ -200,32 +189,36 @@ class _HomeCustomerState extends State<HomeCustomer> {
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
+                fontSize: 20,
               ),
             );
           },
         ),
-        backgroundColor: _primaryGreen,
-        actions: [],
+        backgroundColor: _primaryColor,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Badge(
+                label: Text('${widget.cartItemCount}'),
+                child: Icon(Icons.shopping_bag_outlined, size: 24),
+              ),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: Column(
           children: [
-            // 👤 USER HEADER
-            _buildUserHeader(),
-
-            // 📱 MAIN CONTENT
             Expanded(
               child: RefreshIndicator(
                 onRefresh: _refreshData,
+                color: _primaryColor,
                 child: CustomScrollView(
                   slivers: [
-                    // 🔍 SEARCH BAR
+                    SliverToBoxAdapter(child: _buildUserHeader()),
                     SliverToBoxAdapter(child: _buildSearchBar()),
-
-                    // 🎯 HERO BANNER
                     SliverToBoxAdapter(child: _buildHeroBanner()),
-
-                    // CONTENT BASED ON SEARCH STATE
                     if (_isSearching) ..._buildSearchContent(),
                     if (!_isSearching) ..._buildMainContent(),
                   ],
@@ -248,20 +241,35 @@ class _HomeCustomerState extends State<HomeCustomer> {
     return [
       SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Search Results for "$_searchQuery"',
+                'Results for "$_searchQuery"',
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
                 ),
               ),
-              Text(
-                '${_searchResults.length} items',
-                style: TextStyle(color: _darkGrey),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: _primaryColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${_searchResults.length}',
+                  style: TextStyle(
+                    color: _primaryColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
               ),
             ],
           ),
@@ -273,7 +281,6 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
   List<Widget> _buildMainContent() {
     return [
-      // 🍽️ CATEGORIES SECTION
       SliverToBoxAdapter(
         child: _buildSectionHeader(
           "Categories",
@@ -282,11 +289,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
         ),
       ),
       SliverToBoxAdapter(child: _buildCategoriesRow()),
-
-      // 🔥 BEST SELLERS
+      const SliverToBoxAdapter(child: SizedBox(height: 20)),
       SliverToBoxAdapter(
         child: _buildSectionHeader(
-          "Best Sellers",
+          "🔥 Best Sellers",
           "See All",
           onSeeAll: _navigateToMenuScreen,
         ),
@@ -297,11 +303,10 @@ class _HomeCustomerState extends State<HomeCustomer> {
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const SizedBox(
-                height: 200,
+                height: 220,
                 child: Center(child: CircularProgressIndicator()),
               );
             }
-            // Check errors
             if (snapshot.hasError ||
                 !snapshot.hasData ||
                 snapshot.data!.isEmpty) {
@@ -311,21 +316,19 @@ class _HomeCustomerState extends State<HomeCustomer> {
           },
         ),
       ),
-
-      // 💚 RECOMMENDED FOR YOU
+      const SliverToBoxAdapter(child: SizedBox(height: 20)),
       SliverToBoxAdapter(
         child: _buildSectionHeader(
-          "Recommended for you",
+          "💚 Recommended for you",
           "See All",
           onSeeAll: _navigateToMenuScreen,
         ),
       ),
-      _buildRecommendedGrid(), // Updated logic inside
+      _buildRecommendedGrid(),
+      const SliverToBoxAdapter(child: SizedBox(height: 40)),
     ];
   }
 
-  // 👤 USER HEADER - SAFE SPLIT LOGIC
-  // Update the _buildUserHeader method in home_customer.dart
   Widget _buildUserHeader() {
     return FutureBuilder<UserProfile?>(
       future: _userProfileFuture,
@@ -347,8 +350,14 @@ class _HomeCustomerState extends State<HomeCustomer> {
         }
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          decoration: const BoxDecoration(color: Colors.white),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.white, _primaryColor.withValues(alpha: 0.03)],
+            ),
+          ),
           child: Row(
             children: [
               Expanded(
@@ -356,43 +365,71 @@ class _HomeCustomerState extends State<HomeCustomer> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Good ${_getTimeBasedGreeting()}!",
-                      style: TextStyle(fontSize: 14, color: _darkGrey),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "Hello, $userName 👋",
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      "DineCoins: ${dineCoins.toStringAsFixed(0)}",
+                      "Good ${_getTimeBasedGreeting()}! 👋",
                       style: TextStyle(
                         fontSize: 14,
-                        color: _primaryGreen,
-                        fontWeight: FontWeight.w600,
+                        color: _darkGrey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Welcome, $userName",
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _primaryColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.star, color: _primaryColor, size: 16),
+                          const SizedBox(width: 6),
+                          Text(
+                            "DineCoins: ${dineCoins.toStringAsFixed(0)}",
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: _primaryColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.all(2),
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(
-                    color: _primaryGreen.withValues(alpha: 0.3),
+                  gradient: LinearGradient(
+                    colors: [
+                      _primaryColor,
+                      _primaryColor.withValues(alpha: 0.7),
+                    ],
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _primaryColor.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-                child: CircleAvatar(
-                  radius: 22,
-                  backgroundColor: _primaryGreen.withValues(alpha: 0.1),
-                  child: Icon(Icons.person, color: _primaryGreen, size: 24),
-                ),
+                child: const Icon(Icons.person, color: Colors.white, size: 28),
               ),
             ],
           ),
@@ -401,77 +438,85 @@ class _HomeCustomerState extends State<HomeCustomer> {
     );
   }
 
-  // Add shimmer loading for user header
   Widget _buildUserHeaderShimmer() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(width: 100, height: 14, color: _lightGrey),
-                const SizedBox(height: 8),
-                Container(width: 150, height: 20, color: _lightGrey),
-                const SizedBox(height: 8),
                 Container(width: 120, height: 14, color: _lightGrey),
+                const SizedBox(height: 12),
+                Container(width: 160, height: 24, color: _lightGrey),
+                const SizedBox(height: 12),
+                Container(width: 140, height: 14, color: _lightGrey),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(2),
+            width: 56,
+            height: 56,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: _primaryGreen.withValues(alpha: 0.3)),
+              color: _lightGrey,
             ),
-            child: CircleAvatar(radius: 22, backgroundColor: _lightGrey),
           ),
         ],
       ),
     );
   }
 
-  // 🔍 SEARCH BAR
   Widget _buildSearchBar() {
     return Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Container(
-        height: 50,
+        height: 52,
         decoration: BoxDecoration(
           color: _lightGrey,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _primaryColor.withValues(alpha: 0.2)),
         ),
         child: TextField(
           controller: _searchController,
           decoration: InputDecoration(
-            hintText: "Search store...",
-            hintStyle: TextStyle(color: _darkGrey),
-            prefixIcon: Icon(Icons.search, color: _darkGrey),
+            hintText: "Search menu items...",
+            hintStyle: TextStyle(color: _darkGrey, fontSize: 14),
+            prefixIcon: Icon(Icons.search, color: _darkGrey, size: 20),
             suffixIcon: _isSearching
                 ? IconButton(
-                    icon: Icon(Icons.close, color: _darkGrey),
+                    icon: Icon(Icons.close, color: _darkGrey, size: 20),
                     onPressed: _clearSearch,
                   )
                 : null,
             border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            contentPadding: const EdgeInsets.symmetric(vertical: 14),
           ),
         ),
       ),
     );
   }
 
-  // 🎯 HERO BANNER
   Widget _buildHeroBanner() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: _primaryGreen.withValues(alpha: 0.1),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [_primaryColor, _primaryColor.withValues(alpha: 0.8)],
+          ),
           borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: _primaryColor.withValues(alpha: 0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -485,11 +530,11 @@ class _HomeCustomerState extends State<HomeCustomer> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: _primaryGreen,
+                      color: Colors.white.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: const Text(
-                      "Fresh",
+                      "🍽️ Fresh Daily",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,
@@ -499,31 +544,34 @@ class _HomeCustomerState extends State<HomeCustomer> {
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    "Get Fresh Food",
+                    "Discover Fresh Dishes",
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black,
+                      color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "Fresh and organic food delivered to your table",
-                    style: TextStyle(color: _darkGrey, fontSize: 14),
+                    "Freshly prepared meals served right to your table",
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(width: 20),
-            // Replaced with Icon as placeholder to avoid asset crash
             Container(
-              width: 100,
-              height: 100,
+              width: 90,
+              height: 90,
               decoration: BoxDecoration(
-                color: _lightGrey,
-                borderRadius: BorderRadius.circular(10),
+                color: Colors.white.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.restaurant, color: _primaryGreen, size: 40),
+              child: Icon(Icons.restaurant, color: Colors.white, size: 45),
             ),
           ],
         ),
@@ -531,23 +579,22 @@ class _HomeCustomerState extends State<HomeCustomer> {
     );
   }
 
-  // 📌 SECTION HEADER
   Widget _buildSectionHeader(
     String title,
     String action, {
     VoidCallback? onSeeAll,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
             style: const TextStyle(
-              fontSize: 18,
+              fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: Colors.black,
+              color: Color(0xFF1F2937),
             ),
           ),
           GestureDetector(
@@ -555,8 +602,9 @@ class _HomeCustomerState extends State<HomeCustomer> {
             child: Text(
               action,
               style: TextStyle(
-                color: _primaryGreen,
+                color: _primaryColor,
                 fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
             ),
           ),
@@ -565,7 +613,6 @@ class _HomeCustomerState extends State<HomeCustomer> {
     );
   }
 
-  // 🍽️ CATEGORIES ROW
   Widget _buildCategoriesRow() {
     return FutureBuilder<List<AppCategory>>(
       future: _categoriesFuture,
@@ -574,7 +621,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
           return SizedBox(
             height: 100,
             child: Center(
-              child: CircularProgressIndicator(color: _primaryGreen),
+              child: CircularProgressIndicator(color: _primaryColor),
             ),
           );
         }
@@ -585,12 +632,12 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
         final categories = snapshot.data!;
         return SizedBox(
-          height: 100,
+          height: 110,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             itemCount: categories.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (context, index) {
               final category = categories[index];
               return _buildCategoryItem(category);
@@ -607,39 +654,47 @@ class _HomeCustomerState extends State<HomeCustomer> {
       child: Column(
         children: [
           Container(
-            width: 70,
-            height: 70,
+            width: 75,
+            height: 75,
             decoration: BoxDecoration(
-              color: _lightGrey,
-              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [
+                  _primaryColor.withValues(alpha: 0.15),
+                  _primaryColor.withValues(alpha: 0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: _primaryColor.withValues(alpha: 0.2)),
             ),
             child: Icon(
               _getIconForCategory(category.name),
               size: 32,
-              color: _primaryGreen,
+              color: _primaryColor,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            category.name,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: _darkGrey,
+          SizedBox(
+            width: 75,
+            child: Text(
+              category.name,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF1F2937),
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
     );
   }
 
-  // 🔥 BEST SELLERS GRID
   Widget _buildBestSellersGrid(List<MenuItem> bestsellers) {
     return SizedBox(
-      height: 250,
+      height: 240,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -649,7 +704,7 @@ class _HomeCustomerState extends State<HomeCustomer> {
           return Container(
             width: 160,
             margin: EdgeInsets.only(
-              right: index == bestsellers.length - 1 ? 0 : 15,
+              right: index == bestsellers.length - 1 ? 0 : 12,
             ),
             child: _buildProductCard(item),
           );
@@ -658,82 +713,74 @@ class _HomeCustomerState extends State<HomeCustomer> {
     );
   }
 
-  // 💚 RECOMMENDED GRID - REFACTORED TO FIX "NO ELEMENT" ERROR
   Widget _buildRecommendedGrid() {
     return FutureBuilder<List<MenuItem>>(
       future: _recommendedFuture,
       builder: (context, snapshot) {
-        // 1. Return a SliverToBoxAdapter with loading state
         if (snapshot.connectionState == ConnectionState.waiting) {
           return SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(top: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 20),
               child: _buildProductCardShimmer(),
             ),
           );
         }
 
-        // 2. Return a SliverToBoxAdapter for error or empty state (Prevents crash)
         if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
         final items = snapshot.data!;
 
-        // 3. Return the actual SliverGrid with valid data count
         return SliverGrid(
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             childAspectRatio: 0.75,
-            crossAxisSpacing: 15,
-            mainAxisSpacing: 15,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
           ),
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: _buildProductCard(items[index]),
-              );
-            },
-            childCount: items.length > 4
-                ? 4
-                : items.length, // Limit to 4 or less
-          ),
+          delegate: SliverChildBuilderDelegate((context, index) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: _buildProductCard(items[index]),
+            );
+          }, childCount: items.length > 4 ? 4 : items.length),
         );
       },
     );
   }
 
-  // 🔍 SEARCH RESULTS GRID
   SliverGrid _buildProductGrid(List<MenuItem> items) {
     return SliverGrid(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         childAspectRatio: 0.75,
-        crossAxisSpacing: 15,
-        mainAxisSpacing: 15,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
       delegate: SliverChildBuilderDelegate((context, index) {
         final item = items[index];
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           child: _buildProductCard(item),
         );
       }, childCount: items.length),
     );
   }
 
-  // 🛒 PRODUCT CARD
   Widget _buildProductCard(MenuItem item) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _primaryColor.withValues(alpha: 0.1),
+          width: 1.5,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
+            color: _primaryColor.withValues(alpha: 0.08),
+            blurRadius: 16,
             offset: const Offset(0, 4),
           ),
         ],
@@ -741,24 +788,23 @@ class _HomeCustomerState extends State<HomeCustomer> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // PRODUCT IMAGE
           Stack(
             children: [
               Container(
-                height: 120,
+                height: 130,
                 width: double.infinity,
                 decoration: BoxDecoration(
                   color: _lightGrey,
                   borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(18),
-                    topRight: Radius.circular(18),
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
                 ),
                 child: item.imageUrl != null
                     ? ClipRRect(
                         borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(18),
-                          topRight: Radius.circular(18),
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
                         ),
                         child: Image.network(
                           item.imageUrl!,
@@ -781,83 +827,101 @@ class _HomeCustomerState extends State<HomeCustomer> {
               if (item.isBestseller)
                 Positioned(
                   top: 8,
-                  left: 8,
+                  right: 8,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
+                      horizontal: 10,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: _primaryGreen,
-                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.orange.withValues(alpha: 0.4),
+                          blurRadius: 8,
+                        ),
+                      ],
                     ),
                     child: const Text(
-                      "BEST",
+                      "⭐ Best",
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 10,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 ),
             ],
           ),
-
-          // PRODUCT DETAILS
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    color: Colors.black,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: Color(0xFF1F2937),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  item.description ?? "Fresh and delicious",
-                  style: TextStyle(color: _darkGrey, fontSize: 12),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      item.formattedPrice,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: _primaryGreen,
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => widget.onAddToCart(item),
-                      child: Container(
-                        width: 30,
-                        height: 30,
-                        decoration: BoxDecoration(
-                          color: _primaryGreen,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.add,
-                          color: Colors.white,
-                          size: 18,
+                  const SizedBox(height: 4),
+                  Text(
+                    item.description ?? "Delicious",
+                    style: TextStyle(color: _darkGrey, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Spacer(),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        item.formattedPrice,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: _primaryColor,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      InkWell(
+                        onTap: () => widget.onAddToCart(item),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                _primaryColor,
+                                _primaryColor.withValues(alpha: 0.8),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _primaryColor.withValues(alpha: 0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -867,34 +931,32 @@ class _HomeCustomerState extends State<HomeCustomer> {
 
   Widget _buildProductCardShimmer() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: _lightGrey),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            height: 120,
+            height: 130,
             width: double.infinity,
             decoration: BoxDecoration(
               color: _lightGrey,
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.all(12),
+          Padding(
+            padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: 8),
-                SizedBox(height: 4),
-                SizedBox(height: 8),
+                Container(width: 80, height: 14, color: _lightGrey),
+                const SizedBox(height: 8),
+                Container(width: 100, height: 12, color: _lightGrey),
               ],
             ),
           ),
@@ -906,23 +968,36 @@ class _HomeCustomerState extends State<HomeCustomer> {
   Widget _buildEmptySection(String message) {
     return Container(
       padding: const EdgeInsets.all(40),
-      margin: const EdgeInsets.symmetric(horizontal: 20),
+      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _primaryColor.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: _primaryColor.withValues(alpha: 0.2)),
       ),
       child: Center(
-        child: Text(
-          message,
-          style: TextStyle(color: _darkGrey),
-          textAlign: TextAlign.center,
+        child: Column(
+          children: [
+            Icon(
+              Icons.restaurant,
+              size: 60,
+              color: _primaryColor.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: TextStyle(
+                color: _darkGrey,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // 🕒 HELPER METHODS
   String _getTimeBasedGreeting() {
     final hour = DateTime.now().hour;
     if (hour < 12) return 'Morning';

@@ -137,7 +137,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${menuItem.name} added to cart'),
-        backgroundColor: const Color(0xFF2196F3),
+        backgroundColor: const Color(0xFF4F46E5),
         duration: const Duration(seconds: 2),
       ),
     );
@@ -570,7 +570,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
           currentIndex: _currentIndex,
           onTap: (index) => setState(() => _currentIndex = index),
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF2196F3),
+          selectedItemColor: const Color(0xFF4F46E5),
           unselectedItemColor: const Color(0xFF7C7C7C),
           showSelectedLabels: false,
           showUnselectedLabels: false,
@@ -597,7 +597,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF2196F3),
+                          color: Color(0xFF4F46E5),
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
@@ -627,7 +627,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                       child: Container(
                         padding: const EdgeInsets.all(2),
                         decoration: const BoxDecoration(
-                          color: Color(0xFF2196F3),
+                          color: Color(0xFF4F46E5),
                           shape: BoxShape.circle,
                         ),
                         constraints: const BoxConstraints(
@@ -765,7 +765,7 @@ class _CheckoutDialogState extends State<CheckoutDialog> {
               },
               style: SegmentedButton.styleFrom(
                 backgroundColor: Colors.grey[100],
-                selectedBackgroundColor: const Color(0xFF53B175),
+                selectedBackgroundColor: const Color(0xFF4F46E5),
                 selectedForegroundColor: Colors.white,
               ),
             ),

@@ -26,7 +26,7 @@ class CartScreen extends StatefulWidget {
 }
 
 class _CartScreenState extends State<CartScreen> {
-  final Color _primaryGreen = const Color(0xFF2196F3);
+  final Color _primaryColor = const Color(0xFF4F46E5);
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +235,7 @@ class _CartScreenState extends State<CartScreen> {
                         Text(
                           'Note: ${cartItem.specialInstructions}',
                           style: TextStyle(
-                            color: _primaryGreen,
+                            color: _primaryColor,
                             fontSize: 12,
                             fontStyle: FontStyle.italic,
                           ),
@@ -327,7 +327,7 @@ class _CartScreenState extends State<CartScreen> {
       child: Material(
         color: enabled
             ? (icon == Icons.add
-                  ? _primaryGreen.withValues(alpha: 0.1)
+                  ? _primaryColor.withValues(alpha: 0.1)
                   : Colors.transparent)
             : Colors.grey.shade100,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -338,7 +338,7 @@ class _CartScreenState extends State<CartScreen> {
             icon,
             size: 18,
             color: enabled
-                ? (icon == Icons.add ? _primaryGreen : Colors.grey)
+                ? (icon == Icons.add ? _primaryColor : Colors.grey)
                 : Colors.grey.shade400,
           ),
         ),
@@ -402,13 +402,13 @@ class _CartScreenState extends State<CartScreen> {
                   widget.onCheckout();
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _primaryGreen,
+                  backgroundColor: _primaryColor,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
                   ),
                   elevation: 2,
-                  shadowColor: _primaryGreen.withValues(alpha: 0.3),
+                  shadowColor: _primaryColor.withValues(alpha: 0.3),
                 ),
                 child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -475,7 +475,7 @@ class _CartScreenState extends State<CartScreen> {
           style: TextStyle(
             fontSize: isTotal ? 18 : 14,
             fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-            color: isTotal ? _primaryGreen : Colors.grey.shade700,
+            color: isTotal ? _primaryColor : Colors.grey.shade700,
           ),
         ),
       ],
@@ -547,7 +547,7 @@ class _CartScreenState extends State<CartScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: _primaryGreen,
+        backgroundColor: _primaryColor,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         duration: const Duration(seconds: 2),
