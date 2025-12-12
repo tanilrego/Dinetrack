@@ -24,7 +24,6 @@ class RoleBasedRouter extends StatefulWidget {
 class _RoleBasedRouterState extends State<RoleBasedRouter> {
   String? _userRole;
   bool _loading = true;
-  String establishmntId = "633f850b-3b6d-4cc1-9132-14fdf487440a";
 
   @override
   void initState() {

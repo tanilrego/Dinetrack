@@ -68,15 +68,15 @@ class _QRScannerPageState extends State<QRScannerPage> {
         setState(() => _isScanning = false);
 
         // STRICT AUTH FLOW:
-        // 1. Set the pending ID
+        // Set ID in AuthService (backup)
         AuthService.pendingEstablishmentId = establishmentId;
 
-        // 2. Sign out to force LandingPage reset (and close any existing session)
+        // Ensure signed out
         await Supabase.instance.client.auth.signOut();
 
-        // 3. Pop to root (AuthGate) which will now show LandingPage with the popup
+        // Pop with result so LandingPage can handle it
         if (mounted) {
-          Navigator.of(context).popUntil((route) => route.isFirst);
+          Navigator.of(context).pop(establishmentId);
         }
         break;
       }

@@ -778,11 +778,40 @@ class _LandingPageState extends State<LandingPage> {
               ),
               SizedBox(height: isMobile ? 24 : 32),
               ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  final result = await Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const QRScannerPage()),
                   );
+
+                  // If we got an ID back, it means we must show the restaurant details
+                  // The scanner has already signed out and set AuthService.pendingEstablishmentId
+                  if (result != null && result is String && mounted) {
+                    // Check if data is available locally? No, we need to fetch or use _openRestaurantDetails logic
+                    // Since _openRestaurantDetails expects a map, let's find it in our list
+                    // OR fetch it if not found.
+
+                    // Optimization: Just reloading the LandingPage (since Key changed?) No, we need to trigger logic manually here
+                    // because we are back on the SAME LandingPage instance (pop).
+
+                    // Simply force state update to trigger our existing initState-like logic?
+                    // Or re-call _signInAsGuest logic?
+                    // The user wants "View Details" popup -> which is _showAccessDialog or similar.
+
+                    // Let's find the restaurant in our list first
+                    final restaurant = _restaurants.firstWhere(
+                      (r) => r['id'] == result,
+                      orElse: () => {},
+                    );
+
+                    if (restaurant.isNotEmpty) {
+                      _openRestaurantDetails(restaurant);
+                    } else {
+                      // If not in list (maybe new or not loaded), reload or show guest dialog directly?
+                      // Let's fetch it or show generic dialog
+                      _showAccessDialog(context, result);
+                    }
+                  }
                 },
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('Scan QR Code'),
