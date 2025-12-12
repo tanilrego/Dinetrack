@@ -953,15 +953,20 @@ class _SupervisorPageState extends State<SupervisorPage>
 
   Future<void> _deleteRestaurant(String id) async {
     try {
+      // 1. Delete associated staff assignments first (Cascade Delete manually)
       await supabase
-          .from('establishments')
-          .update({'is_active': false})
-          .eq('id', id);
+          .from('staff_assignments')
+          .delete()
+          .eq('establishment_id', id);
+
+      // 2. Delete the establishment (Hard Delete)
+      await supabase.from('establishments').delete().eq('id', id);
+
       if (mounted) {
-        setState(() {});
+        setState(() {}); // Refresh the list
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Restaurant deactivated successfully'),
+            content: Text('Restaurant deleted successfully'),
             backgroundColor: Color(0xFF10B981),
           ),
         );
@@ -969,7 +974,7 @@ class _SupervisorPageState extends State<SupervisorPage>
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deactivating restaurant: $e')),
+          SnackBar(content: Text('Error deleting restaurant: $e')),
         );
       }
     }

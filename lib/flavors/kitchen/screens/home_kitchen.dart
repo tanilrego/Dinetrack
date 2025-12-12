@@ -1339,8 +1339,10 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   }
 
   Future<void> _deleteAssistanceRequest(String id) async {
+    print('DEBUG: Attempting to delete assistance request with ID: $id');
     try {
       await supabase.from('assist_requests').delete().eq('id', id);
+      print('DEBUG: Successfully deleted request $id');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -1350,6 +1352,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
         );
       }
     } catch (e) {
+      print('ERROR deleting request: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,

@@ -383,7 +383,30 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   }
 
   // Payment success handler
-  void _handlePaymentSuccess(String orderId) {
+  Future<void> _handlePaymentSuccess(String orderId) async {
+    try {
+      // Update order status in database
+      await _supabaseService.client
+          .from('orders')
+          .update({
+            'payment_status': 'paid',
+            'status': 'confirmed', // Assuming paid means confirmed
+          })
+          .eq('id', orderId);
+
+      debugPrint('DEBUG: Updated order $orderId payment_status to paid');
+    } catch (e) {
+      debugPrint('ERROR: Failed to update payment status for $orderId: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Payment recorded but status update failed: $e'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    }
+
     if (mounted) {
       _clearCart();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -396,7 +419,6 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         ),
       );
     }
-    debugPrint('Payment successful for order: $orderId');
   }
 
   // Payment failure handler
