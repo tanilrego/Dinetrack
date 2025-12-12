@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'core/services/auth_service.dart';
 
 class QRScannerPage extends StatefulWidget {
@@ -71,8 +71,11 @@ class _QRScannerPageState extends State<QRScannerPage> {
         // Set ID in AuthService (backup)
         AuthService.pendingEstablishmentId = establishmentId;
 
-        // Ensure signed out
-        await Supabase.instance.client.auth.signOut();
+        // Removed signOut here because it causes AuthGate to rebuild and might unmount LandingPage
+        // before we can process the result.
+        // LandingPage handles the auth state anyway (it is the unauthenticated view).
+
+        // Pop with result so LandingPage can handle it
 
         // Pop with result so LandingPage can handle it
         if (mounted) {
