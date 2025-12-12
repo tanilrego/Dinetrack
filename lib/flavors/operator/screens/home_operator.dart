@@ -1,6 +1,11 @@
 import 'package:dinetrack/flavors/operator/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:dinetrack/core/services/supabase_service.dart';
+import 'package:dinetrack/flavors/operator/screens/analytics_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+import 'package:dinetrack/core/services/auth_service.dart';
 import 'qr_code_generator.dart';
 import 'dart:math';
 
@@ -439,11 +444,20 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
 
   Future<void> _signOut() async {
     try {
+      // CLEAR STATE
+      AuthService.pendingEstablishmentId = null;
       await _supabaseService.client.auth.signOut();
-      // Navigate to login screen or handle sign out
-      // You might want to use Navigator.pushReplacementNamed(context, '/login');
+
+      if (mounted) {
+        if (kIsWeb) {
+          // FORCE RELOAD ON WEB
+          html.window.location.reload();
+        } else {
+          // MOBILE LOGOUT
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
     } catch (e) {
-      // debugPrint('Error signing out: $e');
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -499,7 +513,10 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           },
         );
       case 4:
-        return _buildInventoryView();
+        return AnalyticsScreen(
+          establishmentId: _currentEstablishmentId,
+          isDarkMode: isDarkMode,
+        );
       case 5:
         return _buildStaffView();
       case 6:
@@ -551,18 +568,6 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     return Center(
       child: Text(
         'Orders View',
-        style: TextStyle(
-          fontSize: 24,
-          color: isDarkMode ? Colors.white : Colors.black,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInventoryView() {
-    return Center(
-      child: Text(
-        'Inventory Management',
         style: TextStyle(
           fontSize: 24,
           color: isDarkMode ? Colors.white : Colors.black,

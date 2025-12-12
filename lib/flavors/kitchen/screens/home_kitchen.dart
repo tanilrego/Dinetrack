@@ -3,6 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dinetrack/landing_page.dart';
 import '../../../../core/services/supabase_service.dart';
 import 'add_menu_item_page.dart'; // We'll create this
+import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class KitchenStaffScreen extends StatefulWidget {
   const KitchenStaffScreen({super.key});
@@ -23,13 +26,16 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   String _kitchenStaffName = 'Kitchen Staff';
   String _kitchenStation = '';
   String? _profileImageUrl;
+  Map<String, int> _tableNumberMap = {};
 
   @override
   void initState() {
     super.initState();
     _loadEstablishmentId().then((_) async {
       await _loadKDSOrders();
+      await _fetchTableDetails();
       _subscribeToKDS();
+      _subscribeToAssistanceRequests();
       if (mounted) {
         setState(() => isLoading = false);
       }
@@ -182,6 +188,32 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
     }
   }
 
+  Future<void> _fetchTableDetails() async {
+    if (_currentEstablishmentId.isEmpty) return;
+    try {
+      final response = await supabase
+          .from('tables')
+          .select('id, table_number, qr_code')
+          .eq('establishment_id', _currentEstablishmentId);
+
+      final map = <String, int>{};
+      for (var row in response) {
+        if (row['table_number'] != null) {
+          final num = row['table_number'] as int;
+          map[row['id'].toString()] = num;
+          if (row['qr_code'] != null) {
+            map[row['qr_code'].toString()] = num;
+          }
+        }
+      }
+      setState(() {
+        _tableNumberMap = map;
+      });
+    } catch (e) {
+      print('Error fetching table details: $e');
+    }
+  }
+
   void _subscribeToKDS() {
     supabase
         .channel('public:orders')
@@ -192,6 +224,50 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           callback: (payload) {
             // print('KDS Update Recieved: ${payload.eventType}');
             _loadKDSOrders();
+          },
+        )
+        .subscribe();
+  }
+
+  void _subscribeToAssistanceRequests() {
+    supabase
+        .channel('public:assist_requests')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'assist_requests',
+          callback: (payload) {
+            final newRecord = payload.newRecord;
+            if (newRecord['establishment_id'].toString() ==
+                _currentEstablishmentId) {
+              final tableId = newRecord['table_id'] ?? 'Unknown';
+              final tableNum =
+                  _tableNumberMap[tableId.toString()]?.toString() ??
+                  (tableId.toString().startsWith('table-')
+                      ? tableId.toString().split('-')[1]
+                      : tableId.toString());
+
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'New Assistance Request from Table $tableNum',
+                    ),
+                    backgroundColor: Colors.red,
+                    duration: const Duration(seconds: 5),
+                    action: SnackBarAction(
+                      label: 'VIEW',
+                      textColor: Colors.white,
+                      onPressed: () {
+                        setState(() {
+                          selectedMenuIndex = 5; // Switch to Assistance View
+                        });
+                      },
+                    ),
+                  ),
+                );
+              }
+            }
           },
         )
         .subscribe();
@@ -226,11 +302,16 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
     try {
       await supabase.auth.signOut();
       if (mounted) {
-        // Explicitly navigate to LandingPage
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LandingPage()),
-          (route) => false,
-        );
+        if (kIsWeb) {
+          // ignore: avoid_web_libraries_in_flutter
+          html.window.location.reload();
+        } else {
+          // Explicitly navigate to LandingPage
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const LandingPage()),
+            (route) => false,
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1165,8 +1246,19 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
                   itemBuilder: (context, index) {
                     final req = requests[index];
                     final tableId = req['table_id'] ?? 'Unknown';
-                    // You might want to fetch table number using tableId if needed
-                    // For now, displaying ID or name if available
+                    // Determine table number
+                    String tableDisplay = 'Table $tableId';
+                    if (_tableNumberMap.containsKey(tableId.toString())) {
+                      tableDisplay =
+                          'Table ${_tableNumberMap[tableId.toString()]}';
+                    } else if (tableId.toString().startsWith('table-')) {
+                      // Fallback parsing
+                      try {
+                        tableDisplay =
+                            'Table ${tableId.toString().split('-')[1]}';
+                      } catch (_) {}
+                    }
+
                     final time = DateTime.parse(req['created_at']).toLocal();
                     final timeString =
                         "${time.hour}:${time.minute.toString().padLeft(2, '0')}";
@@ -1183,35 +1275,56 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
                           child: Icon(Icons.priority_high, color: Colors.white),
                         ),
                         title: Text(
-                          'Table $tableId needs assistance',
+                          '$tableDisplay needs assistance',
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
                           ),
                         ),
                         subtitle: Text('Requested at $timeString'),
-                        trailing: ElevatedButton.icon(
-                          onPressed: () async {
-                            // Mark as resolved
-                            await supabase
-                                .from('assist_requests')
-                                .update({'status': 'resolved'})
-                                .eq('id', req['id']);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Request marked as resolved'),
-                                  backgroundColor: Colors.green,
+
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () async {
+                                // Mark as resolved
+                                await supabase
+                                    .from('assist_requests')
+                                    .update({'status': 'resolved'})
+                                    .eq('id', req['id']);
+                                if (mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                        'Request marked as resolved',
+                                      ),
+                                      backgroundColor: Colors.green,
+                                    ),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.check, size: 16),
+                              label: const Text('Resolve'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
                                 ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.check),
-                          label: const Text('Resolve'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed: () =>
+                                  _deleteAssistanceRequest(req['id']),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                              ),
+                              tooltip: 'Delete Request',
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -1223,6 +1336,26 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
         );
       },
     );
+  }
+
+  Future<void> _deleteAssistanceRequest(String id) async {
+    try {
+      await supabase.from('assist_requests').delete().eq('id', id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Request deleted'),
+            backgroundColor: Colors.grey,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error deleting request: $e')));
+      }
+    }
   }
 }
 
