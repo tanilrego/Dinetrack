@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:dinetrack/flavors/customer/screens/customer_navigation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/services/auth_service.dart';
 
 class QRScannerPage extends StatefulWidget {
   const QRScannerPage({super.key});
@@ -22,28 +23,62 @@ class _QRScannerPageState extends State<QRScannerPage> {
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  String? _parseIdFromCode(String code) {
+    // Handle full URL: https://dinetrack.com/#/restaurant/123
+    // Handle deep link strategy: #/restaurant/123
+    // Handle raw ID: 123
+    try {
+      if (code.contains('/restaurant/')) {
+        // If it's a URL, pathSegments might work depending on format
+        // But often QR codes are just string dumps.
+        // Let's use simple string splitting for robustness with hash routing
+        final parts = code.split('/restaurant/');
+        if (parts.length > 1) {
+          // Take the part after /restaurant/ and clean it (remove ?query=...)
+          String idPart = parts.last;
+          if (idPart.contains('?')) {
+            idPart = idPart.split('?').first;
+          }
+          if (idPart.contains('#')) {
+            // unlikely if we split by /restaurant/ which usually comes after hash,
+            // but strictly speaking, hash comes first in flutter web unless standard path strategy
+          }
+          return idPart;
+        }
+      }
+      // Assuming it's just the ID if no URL structure found
+      return code;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  void _onDetect(BarcodeCapture capture) async {
     if (!_isScanning) return;
 
     final List<Barcode> barcodes = capture.barcodes;
     for (final barcode in barcodes) {
       final String? code = barcode.rawValue;
       if (code != null && code.isNotEmpty) {
-        // Stop scanning to prevent multiple triggers
+        final String? establishmentId = _parseIdFromCode(code);
+
+        if (establishmentId == null) continue;
+
+        // Stop scanning
         setState(() => _isScanning = false);
 
-        // Use post frame callback to avoid navigation during build/layout
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (_) => CustomerNavigation(establishmentId: code),
-              ),
-            );
-          }
-        });
-        break; // Only process the first valid code
+        // STRICT AUTH FLOW:
+        // 1. Set the pending ID
+        AuthService.pendingEstablishmentId = establishmentId;
+
+        // 2. Sign out to force LandingPage reset (and close any existing session)
+        await Supabase.instance.client.auth.signOut();
+
+        // 3. Pop to root (AuthGate) which will now show LandingPage with the popup
+        if (mounted) {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+        break;
       }
     }
   }
