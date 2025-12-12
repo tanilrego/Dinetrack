@@ -108,6 +108,30 @@ class _AuthGateState extends State<AuthGate> {
   void initState() {
     super.initState();
     _initApp();
+
+    // Listen for URL changes (e.g. scanning a new QR code while app is open)
+    if (kIsWeb) {
+      html.window.onHashChange.listen((_) {
+        _handleUrlChange();
+      });
+    }
+  }
+
+  void _handleUrlChange() {
+    final newId = _getEstablishmentIdFromUrl();
+    if (newId != null && newId != _pendingEstablishmentId) {
+      debugPrint('DEBUG: Detected URL change to establishment: $newId');
+      setState(() {
+        _pendingEstablishmentId = newId;
+        AuthService.pendingEstablishmentId = newId;
+      });
+
+      // If user is already logged in, we must force sign out so they land on
+      // the LandingPage which handles the "View Details / Login" popup for the new restaurant.
+      if (newId != null) {
+        Supabase.instance.client.auth.signOut();
+      }
+    }
   }
 
   Future<void> _initApp() async {
@@ -155,10 +179,13 @@ class _AuthGateState extends State<AuthGate> {
 
         // CRITICAL FIX: If user signs out, we must clear the pending ID
         // to prevent LandingPage from auto-opening the restaurant dialog again.
+        // CHECK: Only clear if logic wasn't the one setting it (Manual Logout vs QR Scan)
         if (event == AuthChangeEvent.signedOut) {
           // We schedule this to avoid modifying state during build
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (_pendingEstablishmentId != null) {
+            // If AuthService says it's null, it was a manual logout.
+            if (AuthService.pendingEstablishmentId == null &&
+                _pendingEstablishmentId != null) {
               setState(() {
                 _pendingEstablishmentId = null;
               });
@@ -167,7 +194,12 @@ class _AuthGateState extends State<AuthGate> {
         }
 
         if (session == null) {
-          return LandingPage(pendingEstablishmentId: _pendingEstablishmentId);
+          return LandingPage(
+            key: ValueKey(
+              _pendingEstablishmentId,
+            ), // Rebuild if ID changes to trigger popup
+            pendingEstablishmentId: _pendingEstablishmentId,
+          );
         }
 
         return RoleBasedRouter(

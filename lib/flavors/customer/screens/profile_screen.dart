@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/auth_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,6 +19,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _totalOrders = 0;
   int _pendingOrders = 0;
   bool _isLoading = true;
+
+  Future<void> _signOut() async {
+    setState(() => _isLoading = true);
+    try {
+      // Clear any pending establishment ID to prevent auto-reentry
+      AuthService.pendingEstablishmentId = null;
+
+      await _supabaseService.client.auth.signOut();
+
+      if (mounted) {
+        if (kIsWeb) {
+          // Force reload to clear all state/history
+          html.window.location.reload();
+        } else {
+          Navigator.of(context).popUntil((route) => route.isFirst);
+        }
+      }
+    } catch (e) {
+      debugPrint('Error signing out: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -83,29 +113,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _isLoading = false;
       });
-    }
-  }
-
-  Future<void> _signOut() async {
-    try {
-      // Clear any pending establishment ID to prevent auto-reentry
-      AuthService.pendingEstablishmentId = null;
-
-      await _supabaseService.client.auth.signOut();
-
-      // The AuthGate stream in main.dart will handle the UI switch to LandingPage
-      // But just in case, we can force a rebuild or pop if we were deep in navigation
-      if (mounted) {
-        // Clearing navigation stack prevents "back" button issues
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-    } catch (e) {
-      debugPrint('Error signing out: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error signing out: $e')));
-      }
     }
   }
 
