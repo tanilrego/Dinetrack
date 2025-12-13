@@ -38,7 +38,12 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   @override
   void initState() {
     super.initState();
-    _resolveTableId();
+    // Use passed tableId if available
+    if (widget.tableId != null) {
+      _resolvedTableId = widget.tableId;
+    }
+    // If not passed (Manual), we do NOT prompt yet. We prompt at checkout.
+
     _calculateCartTotal();
 
     // Check for payment return success (Web Redirect)
@@ -73,41 +78,50 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     });
   }
 
-  // Resolve table ID - use provided tableId or prompt selection
+  // Previously _resolveTableId was called in initState. We removed that.
+  // We keep the method for manual invocation at checkout.
+  // Previously _resolveTableId was called in initState. We removed that.
+  // We keep the method for manual invocation at checkout.
   Future<void> _resolveTableId() async {
-    if (widget.tableId != null) {
-      setState(() {
-        _resolvedTableId = widget.tableId;
-      });
-    } else {
-      // If table ID is not passed (e.g. manual browsing), prompt user to select a table
-      // Delay slightly to allow build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _showTableSelectionDialog();
-      });
+    if (_resolvedTableId != null) return;
+
+    // If table ID is not passed (e.g. manual browsing), prompt user to select a table
+    // Delay slightly to allow build
+    if (mounted) {
+      await _showTableSelectionDialog();
     }
   }
 
   Future<void> _showTableSelectionDialog() async {
-    final tables = await _supabaseService.client
-        .from('tables')
-        .select('id, table_number')
-        .eq('establishment_id', widget.establishmentId)
-        .order('table_number');
+    List<dynamic> tables = [];
+    try {
+      tables = await _supabaseService.client
+          .from('tables')
+          .select('id, table_number')
+          .eq('establishment_id', widget.establishmentId)
+          .eq('is_available', true)
+          .order('table_number');
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error fetching tables: $e')));
+      return;
+    }
 
     if (!mounted) return;
 
     if (tables.isEmpty) {
-      // Fallback if no tables exist
-      setState(() => _resolvedTableId = 'default-table-id');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No tables currently available')),
+      );
       return;
     }
 
-    String? selectedId;
+    String? selectedId = tables[0]['id'] as String;
 
     await showDialog(
       context: context,
-      barrierDismissible: false, // Force selection
+      barrierDismissible: false,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -115,7 +129,6 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
               title: const Text('Select Your Table'),
               content: DropdownButton<String>(
                 value: selectedId,
-                hint: const Text('Choose Table Number'),
                 isExpanded: true,
                 items: tables.map<DropdownMenuItem<String>>((t) {
                   return DropdownMenuItem(
@@ -124,17 +137,35 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                   );
                 }).toList(),
                 onChanged: (val) {
-                  setDialogState(() {
-                    selectedId = val;
-                  });
+                  setDialogState(() => selectedId = val);
                 },
               ),
               actions: [
                 ElevatedButton(
                   onPressed: selectedId == null
                       ? null
-                      : () {
-                          Navigator.pop(context);
+                      : () async {
+                          final rpcResponse = await _supabaseService.client.rpc(
+                            'select_table',
+                            params: {'p_table_id': selectedId!},
+                          );
+
+                          print('RPC response: $rpcResponse');
+
+                          if (rpcResponse == true) {
+                            Navigator.pop(context);
+                            setState(() {
+                              _resolvedTableId = selectedId;
+                            });
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'That table was just taken. Please choose another.',
+                                ),
+                              ),
+                            );
+                          }
                         },
                   child: const Text('Confirm'),
                 ),

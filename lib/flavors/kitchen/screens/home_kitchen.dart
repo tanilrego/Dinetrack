@@ -3,6 +3,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dinetrack/landing_page.dart';
 import '../../../../core/services/supabase_service.dart';
 import 'add_menu_item_page.dart'; // We'll create this
+import 'package:intl/intl.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'tables_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
@@ -386,7 +389,8 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           },
         );
       case 4:
-        return _buildSettingsView();
+        // Use default empty string if null, though it should be loaded by now
+        return TablesPage(establishmentId: _currentEstablishmentId ?? '');
       case 5:
         return _buildAssistanceView();
       default:
@@ -1155,38 +1159,6 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
     );
   }
 
-  Widget _buildSettingsView() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.settings_outlined,
-            size: 80,
-            color: isDarkMode ? Colors.white : Colors.grey,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Settings',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: isDarkMode ? Colors.white : Colors.black,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Configure your preferences',
-            style: TextStyle(
-              fontSize: 16,
-              color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildSidebar() {
     return Container(
       width: 80,
@@ -1206,6 +1178,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           _buildSidebarIcon(Icons.close, 1, 'Closed Orders'),
           _buildSidebarIcon(Icons.shopping_cart, 2, 'Shopping'),
           _buildSidebarIcon(Icons.receipt, 3, 'Add Menu Item'),
+          _buildSidebarIcon(Icons.table_restaurant, 4, 'Tables'),
           _buildSidebarIcon(Icons.notifications_active, 5, 'Assistance'),
           const Spacer(),
           // Replaced Settings with Logout as requested ("place the logout where theres settings icon")

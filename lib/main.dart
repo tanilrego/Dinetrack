@@ -101,6 +101,7 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   String? _pendingEstablishmentId;
+  String? _pendingTableId;
   bool _isRestoringSession =
       kIsWeb; // Only block on Web where storage check is needed
 
@@ -119,10 +120,14 @@ class _AuthGateState extends State<AuthGate> {
 
   void _handleUrlChange() {
     final newId = _getEstablishmentIdFromUrl();
-    if (newId != null && newId != _pendingEstablishmentId) {
-      debugPrint('DEBUG: Detected URL change to establishment: $newId');
+    final newTableId = _getTableIdFromUrl();
+
+    if (newId != null &&
+        (newId != _pendingEstablishmentId || newTableId != _pendingTableId)) {
+      debugPrint('DEBUG: Detected URL change. Est: $newId, Table: $newTableId');
       setState(() {
         _pendingEstablishmentId = newId;
+        _pendingTableId = newTableId;
         AuthService.pendingEstablishmentId = newId;
       });
 
@@ -137,6 +142,7 @@ class _AuthGateState extends State<AuthGate> {
   Future<void> _initApp() async {
     // 1. Try to get ID from URL first
     String? id = _getEstablishmentIdFromUrl();
+    String? tableId = _getTableIdFromUrl();
 
     // 2. If URL failed (e.g. hash stripped by PayChangu), check Storage (Web only)
     if (id == null && kIsWeb) {
@@ -150,6 +156,9 @@ class _AuthGateState extends State<AuthGate> {
         if (id != null) {
           AuthService.pendingEstablishmentId = id;
           _pendingEstablishmentId = id;
+        }
+        if (tableId != null) {
+          _pendingTableId = tableId;
         }
         _isRestoringSession = false; // Done checking
       });
@@ -205,8 +214,26 @@ class _AuthGateState extends State<AuthGate> {
         return RoleBasedRouter(
           userId: session.user.id,
           pendingEstablishmentId: _pendingEstablishmentId,
+          tableId: _pendingTableId,
         );
       },
     );
   }
+}
+
+/// Helper to get Table ID if present (e.g. ?table_id=abc)
+String? _getTableIdFromUrl() {
+  if (!kIsWeb) return null;
+  try {
+    final hash =
+        html.window.location.hash; // e.g. #/restaurant/123?table_id=456
+    if (hash.contains('?')) {
+      final queryPart = hash.split('?').last;
+      final uri = Uri(query: queryPart);
+      return uri.queryParameters['table_id'];
+    }
+  } catch (e) {
+    debugPrint('Error parsing table ID: $e');
+  }
+  return null;
 }

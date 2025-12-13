@@ -10,11 +10,13 @@ import '../../flavors/supervisor/screens/home_supervisor.dart';
 class RoleBasedRouter extends StatefulWidget {
   final String userId;
   final String? pendingEstablishmentId;
+  final String? tableId;
 
   const RoleBasedRouter({
     super.key,
     required this.userId,
     this.pendingEstablishmentId,
+    this.tableId,
   });
 
   @override
@@ -53,7 +55,10 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
             widget.pendingEstablishmentId ?? AuthService.pendingEstablishmentId;
 
         if (targetId != null) {
-          return CustomerNavigation(establishmentId: targetId);
+          return CustomerNavigation(
+            establishmentId: targetId,
+            tableId: widget.tableId,
+          );
         }
 
         // If no target establishment, user shouldn't be here as 'logged in customer'
