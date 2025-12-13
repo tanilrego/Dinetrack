@@ -460,22 +460,211 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
                     ],
                   ),
                 )
-              : GridView.builder(
-                  padding: const EdgeInsets.all(24),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    childAspectRatio:
-                        0.85, // Increased from 0.75 for smaller cards
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                  ),
-                  itemCount: filteredOrders.length,
-                  itemBuilder: (context, index) {
-                    return _buildOrderCard(filteredOrders[index]);
-                  },
-                ),
+              : _buildGroupedTableGrid(filteredOrders),
         ),
       ],
+    );
+  }
+
+  // Group orders by table and build grid
+  Widget _buildGroupedTableGrid(List<TableOrder> orders) {
+    // Group by table number
+    Map<String, List<TableOrder>> grouped = {};
+    for (var order in orders) {
+      final tableNum = order.tableNumber?.toString() ?? 'Unknown';
+      if (!grouped.containsKey(tableNum)) {
+        grouped[tableNum] = [];
+      }
+      grouped[tableNum]!.add(order);
+    }
+
+    // Sort table numbers if possible (numeric)
+    final sortedKeys = grouped.keys.toList()
+      ..sort((a, b) {
+        if (int.tryParse(a) != null && int.tryParse(b) != null) {
+          return int.parse(a).compareTo(int.parse(b));
+        }
+        return a.compareTo(b);
+      });
+
+    return GridView.builder(
+      padding: const EdgeInsets.all(24),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 350,
+        childAspectRatio: 0.7, // Taller cards to fit multiple items
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
+      itemCount: sortedKeys.length,
+      itemBuilder: (context, index) {
+        final tableNum = sortedKeys[index];
+        final tableOrders = grouped[tableNum]!;
+        // Use the first order's timestamp for the card header or just 'Pending'
+        return _buildTableCard(tableNum, tableOrders);
+      },
+    );
+  }
+
+  Widget _buildTableCard(String tableNum, List<TableOrder> orders) {
+    // Collect all items
+    List<OrderItem> allItems = [];
+    for (var o in orders) {
+      if (o.items != null) {
+        allItems.addAll(o.items!);
+      }
+    }
+
+    // Determine overall status color
+    // If any is cooking, blue. If all ready, green. If waiting, orange.
+    Color statusColor = Colors.orange;
+    String statusLabel = 'Waiting';
+    if (_kdsFilter == 'Preparing') {
+      statusColor = Colors.blue;
+      statusLabel = 'Preparing';
+    } else if (_kdsFilter == 'Ready') {
+      statusColor = Colors.green;
+      statusLabel = 'Ready';
+    }
+
+    // Time elapsed (from earliest order)
+    Duration elapsed = Duration.zero;
+    if (orders.isNotEmpty) {
+      final earliest = orders
+          .map((o) => o.createdAt)
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      elapsed = DateTime.now().difference(earliest);
+    }
+
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: statusColor,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Table $tableNum',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  '${elapsed.inMinutes}m',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Items List
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.all(12),
+              itemCount: allItems.length,
+              separatorBuilder: (_, __) => const Divider(),
+              itemBuilder: (context, i) {
+                final item = allItems[i];
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${item.quantity}x',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name, style: const TextStyle(fontSize: 14)),
+                          if (item.modification != null &&
+                              item.modification!.isNotEmpty)
+                            Text(
+                              'Note: ${item.modification}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.orange,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          // Show individual order status if mixed?
+                          // The filter logic handles grouping by status primarily.
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+
+          // Action Buttons (Update All Status)
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                if (_kdsFilter != 'Ready')
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        // Move ALL orders for this table to next stage
+                        String nextStatus = _kdsFilter == 'Waiting'
+                            ? 'preparing'
+                            : 'ready';
+                        for (var o in orders) {
+                          await _updateOrderStatus(o.id, nextStatus);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: statusColor,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: Text(
+                        _kdsFilter == 'Waiting'
+                            ? 'Start Cooking'
+                            : 'Mark Ready',
+                      ),
+                    ),
+                  ),
+                if (_kdsFilter == 'Ready')
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        for (var o in orders) {
+                          await _updateOrderStatus(o.id, 'served');
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.grey,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Mark Served'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1344,6 +1533,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
       await supabase.from('assist_requests').delete().eq('id', id);
       print('DEBUG: Successfully deleted request $id');
       if (mounted) {
+        setState(() {}); // Force UI rebuild
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Request deleted'),
@@ -1409,6 +1599,7 @@ class OrderItem {
   final double? price;
   final String? modification;
   final bool isCompleted;
+  final int quantity;
 
   OrderItem({
     required this.id,
@@ -1417,6 +1608,7 @@ class OrderItem {
     this.price,
     this.modification,
     this.isCompleted = false,
+    this.quantity = 1,
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
@@ -1436,6 +1628,7 @@ class OrderItem {
       price: price,
       modification: json['special_instructions'],
       isCompleted: false, // Default to false since DB doesn't have it
+      quantity: json['quantity'] ?? 1,
     );
   }
 }

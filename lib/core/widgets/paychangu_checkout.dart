@@ -66,6 +66,7 @@ class _PayChanguCheckoutState extends State<PayChanguCheckout> {
 
             // Detect success
             if (url.contains("success") || url.contains("paid")) {
+              debugPrint("DEBUG: PayChangu success URL detected: $url");
               widget.onSuccess();
               if (mounted) Navigator.pop(context);
               return NavigationDecision.prevent;

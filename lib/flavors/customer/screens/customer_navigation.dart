@@ -73,39 +73,82 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     });
   }
 
-  // Resolve table ID - use provided tableId or get a default one
+  // Resolve table ID - use provided tableId or prompt selection
   Future<void> _resolveTableId() async {
     if (widget.tableId != null) {
       setState(() {
         _resolvedTableId = widget.tableId;
       });
     } else {
-      final defaultTableId = await _getDefaultTableId();
-      if (mounted) {
-        setState(() {
-          _resolvedTableId = defaultTableId;
-        });
-      }
+      // If table ID is not passed (e.g. manual browsing), prompt user to select a table
+      // Delay slightly to allow build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showTableSelectionDialog();
+      });
     }
   }
 
-  // Get default table ID for the establishment
-  Future<String> _getDefaultTableId() async {
-    try {
-      final response = await _supabaseService.client
-          .from('tables')
-          .select()
-          .eq('establishment_id', widget.establishmentId)
-          .eq('is_available', true)
-          .limit(1);
+  Future<void> _showTableSelectionDialog() async {
+    final tables = await _supabaseService.client
+        .from('tables')
+        .select('id, table_number')
+        .eq('establishment_id', widget.establishmentId)
+        .order('table_number');
 
-      if (response.isNotEmpty) {
-        return response[0]['id'] as String;
-      }
-      return 'default-table-id';
-    } catch (e) {
-      debugPrint('Error getting default table ID: $e');
-      return 'default-table-id';
+    if (!mounted) return;
+
+    if (tables.isEmpty) {
+      // Fallback if no tables exist
+      setState(() => _resolvedTableId = 'default-table-id');
+      return;
+    }
+
+    String? selectedId;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false, // Force selection
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Select Your Table'),
+              content: DropdownButton<String>(
+                value: selectedId,
+                hint: const Text('Choose Table Number'),
+                isExpanded: true,
+                items: tables.map<DropdownMenuItem<String>>((t) {
+                  return DropdownMenuItem(
+                    value: t['id'],
+                    child: Text('Table ${t['table_number']}'),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setDialogState(() {
+                    selectedId = val;
+                  });
+                },
+              ),
+              actions: [
+                ElevatedButton(
+                  onPressed: selectedId == null
+                      ? null
+                      : () {
+                          Navigator.pop(context);
+                        },
+                  child: const Text('Confirm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selectedId != null) {
+      setState(() {
+        _resolvedTableId = selectedId;
+      });
     }
   }
 
@@ -392,7 +435,8 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
             'payment_status': 'paid',
             'status': 'confirmed', // Assuming paid means confirmed
           })
-          .eq('id', orderId);
+          .eq('id', orderId)
+          .select();
 
       debugPrint('DEBUG: Updated order $orderId payment_status to paid');
     } catch (e) {

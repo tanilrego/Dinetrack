@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 // ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+// import 'dart:html' as html; // Deprecated
 
 class SupervisorPage extends StatefulWidget {
   const SupervisorPage({super.key});
@@ -69,8 +69,8 @@ class _SupervisorPageState extends State<SupervisorPage>
                           await supabase.auth.signOut();
                           if (mounted) {
                             if (kIsWeb) {
-                              // ignore: avoid_web_libraries_in_flutter
-                              html.window.location.reload();
+                              // html.window.location.reload(); // Deprecated
+                              Navigator.pop(context); // Just pop for now
                             } else {
                               Navigator.pop(context);
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -632,7 +632,7 @@ class _SupervisorPageState extends State<SupervisorPage>
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _approveRestaurant(context, id, name),
+                    onPressed: () => _approveRestaurant(id, name),
                     icon: const Icon(Icons.check_circle_outline, size: 18),
                     label: const Text('Approve'),
                     style: ElevatedButton.styleFrom(
@@ -648,7 +648,7 @@ class _SupervisorPageState extends State<SupervisorPage>
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () => _rejectRestaurant(context, id, name),
+                    onPressed: () => _rejectRestaurant(id, name),
                     icon: const Icon(Icons.close, size: 18),
                     label: const Text('Reject'),
                     style: ElevatedButton.styleFrom(
@@ -953,13 +953,44 @@ class _SupervisorPageState extends State<SupervisorPage>
 
   Future<void> _deleteRestaurant(String id) async {
     try {
-      // 1. Delete associated staff assignments first (Cascade Delete manually)
+      // 1. Fetch Order IDs to delete Order Items (Deepest dependency)
+      final orders = await supabase
+          .from('orders')
+          .select('id')
+          .eq('establishment_id', id);
+      final orderIds = (orders as List).map((o) => o['id']).toList();
+
+      if (orderIds.isNotEmpty) {
+        for (final oId in orderIds) {
+          await supabase.from('order_items').delete().eq('order_id', oId);
+        }
+      }
+
+      // 2. Delete Orders
+      await supabase.from('orders').delete().eq('establishment_id', id);
+
+      // 3. Delete dependencies directly linked to establishment
       await supabase
           .from('staff_assignments')
           .delete()
           .eq('establishment_id', id);
+      await supabase
+          .from('kitchen_assignments')
+          .delete()
+          .eq('establishment_id', id);
+      await supabase.from('tables').delete().eq('establishment_id', id);
+      await supabase.from('menu_items').delete().eq('establishment_id', id);
+      await supabase
+          .from('dinecoins_ledger')
+          .delete()
+          .eq('establishment_id', id);
+      await supabase
+          .from('assist_requests')
+          .delete()
+          .eq('establishment_id', id);
+      // await supabase.from('subscriptions').delete().eq('restaurant_id', id); // Commented out to avoid column name risk for now
 
-      // 2. Delete the establishment (Hard Delete)
+      // 4. Finally delete the establishment
       await supabase.from('establishments').delete().eq('id', id);
 
       if (mounted) {
@@ -980,11 +1011,7 @@ class _SupervisorPageState extends State<SupervisorPage>
     }
   }
 
-  Future<void> _approveRestaurant(
-    BuildContext context,
-    String id,
-    String name,
-  ) async {
+  Future<void> _approveRestaurant(String id, String name) async {
     try {
       await supabase
           .from('establishments')
@@ -1008,11 +1035,7 @@ class _SupervisorPageState extends State<SupervisorPage>
     }
   }
 
-  Future<void> _rejectRestaurant(
-    BuildContext context,
-    String id,
-    String name,
-  ) async {
+  Future<void> _rejectRestaurant(String id, String name) async {
     try {
       await supabase
           .from('establishments')
