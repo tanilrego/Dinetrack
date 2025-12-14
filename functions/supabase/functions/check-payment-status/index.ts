@@ -62,7 +62,8 @@ serve(async (req) => {
           currency: payment.currency,
           order: payment.order,
           updated_at: payment.updated_at,
-          checked_at: new Date().toISOString()
+          checked_at: new Date().toISOString(),
+          from_provider: false
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -89,7 +90,7 @@ serve(async (req) => {
 
           const providerStatus = paychanguData.status || paychanguData.state;
           const newStatus = providerStatus === "successful" ? "completed" :
-                           providerStatus === "failed" ? "failed" : payment.status;
+            providerStatus === "failed" ? "failed" : payment.status;
 
           // Update database if status changed
           if (newStatus !== payment.status) {

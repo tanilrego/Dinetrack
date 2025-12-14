@@ -13,26 +13,13 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Verify webhook signature
+// Verify webhook signature (Placeholder for now)
 function verifySignature(payload: string, signature: string): boolean {
   if (!PAYCHANGU_WEBHOOK_SECRET) {
     console.warn("No webhook secret configured, skipping signature verification");
     return true;
   }
-
-  // Implement HMAC verification (adjust based on PayChangu's actual implementation)
-  // For now, we'll log and accept (for testing)
-  console.log("Webhook signature:", signature);
-  console.log("Webhook secret length:", PAYCHANGU_WEBHOOK_SECRET?.length);
-
   // TODO: Implement actual HMAC verification when PayChangu provides details
-  // const expectedSignature = crypto
-  //   .createHmac('sha256', PAYCHANGU_WEBHOOK_SECRET)
-  //   .update(payload)
-  //   .digest('hex');
-
-  // return signature === expectedSignature;
-
   return true; // Temporarily accept all webhooks for development
 }
 
@@ -59,53 +46,27 @@ serve(async (req) => {
       return new Response("Invalid signature", { status: 401 });
     }
 
-    const providerPaymentId = data.id || data.transaction_id;
-    const status = data.status || data.state;
+    // --- CRITICAL FIX: Find by internal payment ID (charge_id) ---
+    const internalPaymentId = data.charge_id; // Your internal payment.id
+    const providerTransactionId = data.id || data.transaction_id || data.ref_id; // Actual PayChangu ID
+    const status = data.status || data.state; // e.g., 'successful', 'failed'
     const amount = data.amount;
     const currency = data.currency;
 
-    if (!providerPaymentId) {
-      throw new Error("No provider payment ID in webhook");
+    if (!internalPaymentId) {
+      throw new Error("Webhook is missing internal charge_id (payment.id)");
     }
 
-    // Find payment record by provider_payment_id
+    // --- Find payment record by your internal payment ID ---
     const { data: payment, error: paymentError } = await supabase
       .from("payments")
-      .select("*")
-      .eq("provider_payment_id", providerPaymentId)
+      .select("id, order_id, status, metadata, amount")
+      .eq("id", internalPaymentId) // Lookup by your internal ID
       .single();
 
-    if (paymentError) {
-      // Try finding by metadata
-      const { data: payments } = await supabase
-        .from("payments")
-        .select("*")
-        .eq("metadata->>provider_payment_id", providerPaymentId)
-        .limit(1);
-
-      if (!payments || payments.length === 0) {
-        console.error("Payment not found for provider ID:", providerPaymentId);
-
-        // Log the webhook for manual reconciliation
-        await supabase
-          .from("payments")
-          .insert({
-            provider_payment_id: providerPaymentId,
-            status: "failed",
-            amount: amount ? amount / 100 : 0,
-            currency: currency || "MWK",
-            metadata: {
-              webhook_data: data,
-              error: "Payment record not found",
-              processed_at: new Date().toISOString()
-            }
-          });
-
-        return new Response("Payment not found", { status: 404 });
-      }
-
-      // Use the found payment
-      payment = payments[0];
+    if (paymentError || !payment) {
+      console.error("Payment not found for internal ID:", internalPaymentId, "Error:", paymentError?.message);
+      return new Response("Payment not found", { status: 404 });
     }
 
     console.log("Found payment:", payment.id, "current status:", payment.status);
@@ -119,6 +80,7 @@ serve(async (req) => {
     // Prepare payment update
     const paymentUpdate: any = {
       status: status === "successful" ? "completed" : "failed",
+      provider_payment_id: providerTransactionId, // Set the actual provider ID
       webhook_received_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       metadata: {
@@ -136,8 +98,16 @@ serve(async (req) => {
       .eq("id", payment.id);
 
     if (updateError) {
-      console.error("Error updating payment:", updateError);
-      throw updateError;
+      console.error("Database Update Failed:", updateError);
+      // Return the error message to Postman for immediate inspection
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Database Update Failed",
+        details: updateError.message
+      }), {
+        headers: { "Content-Type": "application/json" },
+        status: 500
+      });
     }
 
     console.log("Payment updated:", payment.id, "new status:", paymentUpdate.status);
@@ -155,14 +125,22 @@ serve(async (req) => {
         })
         .eq("id", payment.order_id);
 
-      if (orderUpdateError) {
-        console.error("Error updating order:", orderUpdateError);
-        throw orderUpdateError;
+      if (orderUpdateError) { // 🌟 CRITICAL FIX: Change 'updateError' to 'orderUpdateError'
+        console.error("Database Order Update Failed:", orderUpdateError);
+        // Use orderUpdateError details in the response
+        return new Response(JSON.stringify({
+          success: false,
+          error: "Database Order Update Failed",
+          details: orderUpdateError.message // 🌟 Use orderUpdateError.message
+        }), {
+          headers: { "Content-Type": "application/json" },
+          status: 500
+        });
       }
 
       console.log("Order updated to paid:", payment.order_id);
 
-      // Send realtime notification
+      // Send realtime notification (Good feature!)
       await supabase.channel(`order-${payment.order_id}`)
         .send({
           type: "broadcast",
@@ -171,13 +149,13 @@ serve(async (req) => {
             order_id: payment.order_id,
             payment_id: payment.id,
             amount: payment.amount,
-            provider_payment_id: providerPaymentId,
+            provider_payment_id: providerTransactionId,
             timestamp: new Date().toISOString()
           }
         });
 
       console.log("Realtime notification sent");
-    } else if (status === "failed") {
+    } else if (status === "failed" || status === "error") {
       // Update order payment status to failed
       await supabase
         .from("orders")
@@ -204,6 +182,7 @@ serve(async (req) => {
   } catch (error) {
     console.error("Webhook processing error:", error);
 
+    // Return 500 to signal PayChangu to retry the webhook
     return new Response(
       JSON.stringify({
         success: false,
@@ -211,7 +190,7 @@ serve(async (req) => {
         timestamp: new Date().toISOString()
       }),
       {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         status: 500
       }
     );

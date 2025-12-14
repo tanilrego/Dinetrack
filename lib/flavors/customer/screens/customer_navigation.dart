@@ -3,11 +3,14 @@ import 'home_customer.dart';
 import 'favorites_screen.dart';
 import 'cart_screen.dart';
 import 'profile_screen.dart';
-import '../../../../core/widgets/paychangu_checkout.dart';
+import 'paychangu_payment_screen.dart';
 import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
+// Conditional import: use stub on web, real package on mobile
+import 'paychangu_mobile.dart' if (dart.library.html) 'paychangu_web.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class CustomerNavigation extends StatefulWidget {
   final String establishmentId;
@@ -353,47 +356,246 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         final txRef =
             'dinetrack-$orderId-${DateTime.now().millisecondsSinceEpoch}';
 
-        // Call PayChangu create edge function to get payment parameters
-        final paymentResponse = await _supabaseService.client.functions.invoke(
-          'paychangu-create',
-          body: {
-            'order_id': orderId,
-            'tx_ref': txRef,
-            'payer_customer_id': _supabaseService.client.auth.currentUser!.id,
-            'amount': finalAmount,
-            'return_url':
-                'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}',
-          },
-        );
+        try {
+          // Get customer details for payment
+          final userId = _supabaseService.client.auth.currentUser?.id;
+          if (userId == null) throw 'User not authenticated';
 
-        if (paymentResponse.status != 200 || paymentResponse.data == null) {
-          throw 'Failed to initiate payment';
-        }
+          final customerData = await _supabaseService.client
+              .from('users')
+              .select('full_name, email, phone')
+              .eq('id', userId)
+              .single();
 
-        final paymentData = paymentResponse.data;
-        final checkoutUrl = paymentData['checkout_url'] as String? ?? '';
+          // Parse customer name
+          final fullName = customerData['full_name'] as String? ?? 'Customer';
+          final nameParts = fullName.split(' ');
+          final firstName = nameParts.isNotEmpty ? nameParts[0] : 'Customer';
+          final lastName = nameParts.length > 1
+              ? nameParts.sublist(1).join(' ')
+              : 'Name';
 
-        // Save establishment ID to storage in case return URL hash is stripped
-        if (kIsWeb) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(
-            'pending_payment_restaurant_id',
-            widget.establishmentId,
-          );
-        }
+          // PLATFORM CHECK
+          final isDesktop =
+              !kIsWeb &&
+              (defaultTargetPlatform == TargetPlatform.windows ||
+                  defaultTargetPlatform == TargetPlatform.linux ||
+                  defaultTargetPlatform == TargetPlatform.macOS);
 
-        // Navigate to PayChangu payment screen
-        if (mounted) {
-          await Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => PayChanguCheckout(
-                checkoutUrl: checkoutUrl,
-                onSuccess: () => _handlePaymentSuccess(orderId),
-                onError: () => _handlePaymentFailure('Payment Error'),
-                onCancel: () => _handlePaymentCancellation(),
+          if (isDesktop) {
+            // --- DESKTOP FLOW ---
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Initializing Payment...')),
+              );
+            }
+
+            // 1. Invoke Edge Function to get Checkout URL
+            final res = await _supabaseService.client.functions.invoke(
+              'create-paychangu-payment',
+              body: {
+                'order_id': orderId,
+                'payer_customer_id': userId,
+                // 'payment_method': 'mobile_money', // Default in edge function
+                'phone_number': customerData['phone'] ?? '',
+                'return_url': kIsWeb ? Uri.base.toString() : null,
+              },
+            );
+
+            if (res.status != 200) {
+              throw 'Payment initialization failed: ${res.status} ${res.data}';
+            }
+
+            final data = res.data;
+            if (data == null || data['checkout_url'] == null) {
+              throw 'Invalid response from payment server';
+            }
+
+            final checkoutUrl = data['checkout_url'] as String;
+            final uri = Uri.parse(checkoutUrl);
+
+            // 2. Launch URL
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+              if (mounted) {
+                // 3. Show Dialog & Listen for Realtime Update
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (dialogContext) {
+                    return AlertDialog(
+                      title: const Text('Payment in Progress'),
+                      content: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            'Please complete the payment in the browser window that just opened.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () {
+                            Navigator.of(dialogContext).pop();
+                            _handlePaymentCancellation();
+                          },
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    );
+                  },
+                );
+
+                // Subscribe to order status changes
+                final channel = _supabaseService.client.channel(
+                  'public:orders:$orderId',
+                );
+                channel
+                    .onPostgresChanges(
+                      event: PostgresChangeEvent.update,
+                      schema: 'public',
+                      table: 'orders',
+                      filter: PostgresChangeFilter(
+                        type: PostgresChangeFilterType.eq,
+                        column: 'id',
+                        value: orderId,
+                      ),
+                      callback: (payload) {
+                        final newStatus = payload.newRecord['payment_status'];
+                        debugPrint('RT: Order status updated to $newStatus');
+                        if (newStatus == 'paid') {
+                          // Close the dialog if it's still open
+                          Navigator.of(context, rootNavigator: true).pop();
+                          _handlePaymentSuccess(orderId);
+                          _supabaseService.client.removeChannel(channel);
+                        } else if (newStatus == 'failed') {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          _handlePaymentFailure('Payment marked as failed');
+                          _supabaseService.client.removeChannel(channel);
+                        }
+                      },
+                    )
+                    .subscribe();
+              }
+            } else {
+              throw 'Could not launch payment URL';
+            }
+          } else if (kIsWeb) {
+            // --- WEB FLOW: Navigate to PaychanguInlinePaymentScreen ---
+            // Import the payment screen and navigate to it
+            // This screen uses iframe embedding for web
+            if (mounted) {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => PaychanguInlinePaymentScreen(
+                    checkoutUrl: '', // Will be fetched inside the screen
+                    transactionReference: txRef,
+                    orderId: orderId,
+                    secretKey: 'SEC-TEST-awHuCpW5cLHMeMSCf9Swix4qo6qj9mXH',
+                    onSuccess: () {
+                      _handlePaymentSuccess(orderId);
+                    },
+                    onFailure: (error) {
+                      _handlePaymentFailure(error);
+                    },
+                    onCancel: () {
+                      _handlePaymentCancellation();
+                    },
+                  ),
+                ),
+              );
+            }
+          } else {
+            // --- MOBILE ONLY: Use PayChangu SDK ---
+            // Initialize PayChangu SDK
+            final paychangu = PayChangu(
+              PayChanguConfig(
+                secretKey:
+                    'SEC-TEST-awHuCpW5cLHMeMSCf9Swix4qo6qj9mXH', // TODO: Move to env
+                isTestMode: true,
               ),
-            ),
-          );
+            );
+
+            // Create payment request
+            final request = PaymentRequest(
+              txRef: txRef,
+              amount: (finalAmount * 100).round(), // Convert to cents
+              currency: Currency.MWK,
+              firstName: firstName,
+              lastName: lastName,
+              email:
+                  customerData['email'] as String? ?? '$userId@dinetrack.com',
+              callbackUrl:
+                  'https://xsflgrmqvnggtdggacrd.supabase.co/functions/v1/paychangu-webhook',
+              returnUrl:
+                  'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}',
+              meta: {
+                'order_id': orderId,
+                'customer_id': userId,
+                'establishment_id': widget.establishmentId,
+              },
+            );
+
+            // Create payment record in database before launching payment
+            await _supabaseService.client.from('payments').insert({
+              'order_id': orderId,
+              'amount': finalAmount,
+              'payment_method': 'paychangu',
+              'status': 'pending',
+              'idempotency_key': txRef,
+              'payer_customer_id': userId,
+              'metadata': {
+                'tx_ref': txRef,
+                'created_at': DateTime.now().toIso8601String(),
+              },
+            });
+
+            // Launch PayChangu payment UI
+            if (mounted) {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => Scaffold(
+                    appBar: AppBar(
+                      title: const Text('Complete Payment'),
+                      elevation: 0,
+                    ),
+                    body: paychangu.launchPayment(
+                      request: request,
+                      onSuccess: (response) {
+                        debugPrint('Payment UI flow completed: $response');
+                        Navigator.pop(context);
+                        _handlePaymentSuccess(orderId);
+                      },
+                      onError: (error) {
+                        debugPrint('Payment failed: $error');
+                        Navigator.pop(context);
+                        _handlePaymentFailure(error.toString());
+                      },
+                      onCancel: () {
+                        debugPrint('Payment cancelled by user');
+                        Navigator.pop(context);
+                        _handlePaymentCancellation();
+                      },
+                    ),
+                  ),
+                ),
+              );
+            }
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to initialize payment: $e'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          debugPrint('PayChangu initialization error: $e');
         }
         return; // Exit early for PayChangu - callbacks will handle the rest
       }

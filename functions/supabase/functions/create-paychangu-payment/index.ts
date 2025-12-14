@@ -1,12 +1,14 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.0";
 
-const PAYCHANGU_API_URL = Deno.env.get("PAYCHANGU_API_URL") || "https://api.paychangu.com/v1";
+// --- ENVIRONMENT VARIABLES ---
 const PAYCHANGU_API_KEY = Deno.env.get("PAYCHANGU_API_KEY");
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 
+// Initialize Supabase client with Service Role Key for elevated permissions
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+const confirmedWebhookUrl = "https://xsflgrmqvnggtdggacrd.supabase.co/functions/v1/paychangu-webhook";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,7 +41,7 @@ serve(async (req: Request) => {
       throw new Error("payer_customer_id is required");
     }
 
-    // Validate payment creation using database function
+    // --- Database Validation (RPC Call) ---
     const { data: validation, error: validationError } = await supabase
       .rpc("validate_payment_creation", {
         p_order_id: order_id,
@@ -59,10 +61,48 @@ serve(async (req: Request) => {
     const customerData = validation.customer;
     const establishmentData = validation.establishment;
 
+    // --- NEW: Phone Number Validation and Cleaning ---
+    const phoneToUse = phone_number || customerData.phone;
+
+    if (!phoneToUse) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Direct charge requires a mobile number. Please log in with a phone number or provide one in the request.",
+          timestamp: new Date().toISOString()
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400
+        }
+      );
+    }
+
+    const cleanedMobileNumber = phoneToUse
+      .replace(/^\+265/g, "") // Remove starting '+265'
+      .replace(/\D/g, "") // Remove any non-digit character (like '+')
+      .substring(0, 9); // Ensure it's exactly the local 9 digits
+
+    if (cleanedMobileNumber.length !== 9) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: "Mobile number provided is invalid after cleaning. Must be 9 digits (local format).",
+          timestamp: new Date().toISOString()
+        }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+          status: 400
+        }
+      );
+    }
+    // --- END Phone Number Validation and Cleaning ---
+
+
     // Generate idempotency key
     const idempotencyKey = crypto.randomUUID();
 
-    // Create payment record in PENDING state
+    // --- Create Payment Record (Pending) ---
     const { data: paymentRecord, error: paymentError } = await supabase
       .from("payments")
       .insert({
@@ -88,10 +128,8 @@ serve(async (req: Request) => {
 
     if (paymentError) {
       console.error("Payment record creation error:", paymentError);
-
-      // Check if it's a duplicate idempotency key error
+      // Handle duplicate idempotency key error (optional logic)
       if (paymentError.code === "23505" && paymentError.message.includes("idempotency_key")) {
-        // Return existing payment
         const { data: existingPayment } = await supabase
           .from("payments")
           .select("*")
@@ -116,37 +154,46 @@ serve(async (req: Request) => {
 
     console.log("Payment record created:", paymentRecord.id);
 
-    // Prepare PayChangu payload
-    // Determine the base URL for callbacks/redirects
+    // --- Prepare PayChangu Payload (Using CONFIRMED working structure) ---
     const origin = req.headers.get("origin") || "";
-    // If client provided a specific return URL (e.g., for deep linking), use it.
-    // Otherwise construct one based on the origin.
     const finalReturnUrl = return_url || `${origin}/payment/complete?payment_id=${paymentRecord.id}`;
 
+    // Split full name for first_name and last_name fields
+    const fullNameParts = customerData.full_name?.split(' ') || [];
+    const firstName = fullNameParts[0] || "Customer";
+    const lastName = fullNameParts.slice(1).join(' ') || "";
+
     const paychanguPayload = {
-      amount: Math.round(orderData.total_amount * 100), // Convert to cents
+      // Amount must be sent as a STRING and in the smallest unit (tambala/cents)
+      amount: Math.round(orderData.total_amount).toString(),
       currency: "MWK",
-      payment_method: payment_method === "mobile_money" ? "momo" : payment_method,
-      customer: {
-        email: customerData.email,
-        phone_number: phone_number || customerData.phone,
-        name: customerData.full_name || "Customer"
-      },
+      // Mobile Money Operator ID for Airtel MoMo - this is required for Direct Charge
+      mobile_money_operator_ref_id: "20be6c20-adeb-4b5b-a7ba-0769820df4fb",
+      // Use the internal payment ID as the charge_id (IMPORTANT for webhook lookup)
+      charge_id: paymentRecord.id,
+
+      // Use the cleaned and validated 9-digit mobile number
+      mobile: cleanedMobileNumber,
+
+      email: customerData.email,
+      first_name: firstName,
+      last_name: lastName,
+
+      callback_url: confirmedWebhookUrl,
+      return_url: finalReturnUrl,
+
       metadata: {
-        payment_id: paymentRecord.id,
-        order_id: order_id,
         order_number: orderData.order_number,
         establishment_name: establishmentData.name,
-        payer_customer_id: payer_customer_id
-      },
-      callback_url: `${SUPABASE_URL}/functions/v1/paychangu-webhook`, // Use direct Supabase URL for webhook to ensure it's reachable
-      return_url: finalReturnUrl
+        payer_customer_id: payer_customer_id,
+        payment_record_id: paymentRecord.id
+      }
     };
 
     console.log("Calling PayChangu API with payload:", JSON.stringify(paychanguPayload, null, 2));
 
-    // Call PayChangu API
-    const paychanguResponse = await fetch(`${PAYCHANGU_API_URL}/payments`, {
+    // --- Call PayChangu API (USING HARDCODED URL FOR RELIABILITY) ---
+    const paychanguResponse = await fetch(`https://api.paychangu.com/mobile-money/payments/initialize`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${PAYCHANGU_API_KEY}`,
@@ -156,45 +203,76 @@ serve(async (req: Request) => {
       body: JSON.stringify(paychanguPayload)
     });
 
-    const paychanguData = await paychanguResponse.json();
-    console.log("PayChangu response:", paychanguData);
+    // ----------------------------------------------------
+    // *** ERROR HANDLING BLOCK ***
+    // ----------------------------------------------------
 
+    // CHECK IF RESPONSE IS NOT OK (Status 4xx or 5xx)
     if (!paychanguResponse.ok) {
-      console.error("PayChangu API error:", paychanguData);
+      const errorBodyText = await paychanguResponse.text();
 
-      // Update payment as failed
+      console.error(
+        `PayChangu API failed with status ${paychanguResponse.status}. Raw Body:`,
+        errorBodyText
+      );
+
+      let paychanguErrorDetails: any = {
+        status: paychanguResponse.status,
+        message: "External API returned an unparsable response.",
+        raw_body_start: errorBodyText.substring(0, 500)
+      };
+
+      try {
+        const parsedJson = JSON.parse(errorBodyText);
+        paychanguErrorDetails = parsedJson;
+      } catch (e) {
+        console.log("Could not parse error response as JSON. It is likely HTML/Text.");
+      }
+
+      // Update the payment record as failed
       await supabase
         .from("payments")
         .update({
           status: "failed",
           metadata: {
             ...paymentRecord.metadata,
-            paychangu_error: paychanguData,
-            failed_at: new Date().toISOString()
-          }
+            paychangu_error: paychanguErrorDetails,
+            failed_at: new Date().toISOString(),
+          },
         })
         .eq("id", paymentRecord.id);
 
-      // Update order payment status
       await supabase
         .from("orders")
         .update({ payment_status: "failed" })
         .eq("id", order_id);
 
-      throw new Error(`PayChangu API error: ${JSON.stringify(paychanguData)}`);
+      // Throw a clean error that returns the details to the client
+      throw new Error(`PayChangu API error: ${paychanguResponse.status}. Details: ${JSON.stringify(paychanguErrorDetails)}`);
     }
 
-    // Update payment with PayChangu details
+    // If we reach here, the response is OK (2xx) and should be JSON
+    const paychanguData = await paychanguResponse.json();
+    console.log("PayChangu response:", paychanguData);
+
+    // Check for success status in the JSON response
+    if (paychanguData.status !== "success") {
+      console.error("PayChangu reported non-success status:", paychanguData);
+      // Treat API-level failures that returned 200 as a failure for our records
+      throw new Error(`PayChangu initiated but reported status: ${paychanguData.status}`);
+    }
+
+    // --- Update Payment Record (Success Path) ---
     await supabase
       .from("payments")
       .update({
-        provider_payment_id: paychanguData.id || paychanguData.transaction_id,
-        checkout_url: paychanguData.checkout_url || paychanguData.payment_url,
-        status: paychanguData.status === "successful" ? "completed" : "pending",
+        provider_payment_id: paychanguData.data?.ref_id || paychanguData.ref_id,
+        checkout_url: null,
+        status: "processing", // Webhook will change to 'completed' or 'failed'
         metadata: {
           ...paymentRecord.metadata,
           paychangu_response: paychanguData,
-          provider_payment_id: paychanguData.id || paychanguData.transaction_id
+          provider_payment_id: paychanguData.data?.ref_id || paychanguData.ref_id
         }
       })
       .eq("id", paymentRecord.id);
@@ -205,17 +283,17 @@ serve(async (req: Request) => {
       .update({ payment_status: "processing" })
       .eq("id", order_id);
 
-    console.log("Payment creation successful:", paymentRecord.id);
+    console.log("Payment initiation successful:", paymentRecord.id);
 
     return new Response(
       JSON.stringify({
         success: true,
         payment_id: paymentRecord.id,
-        checkout_url: paychanguData.checkout_url || paychanguData.payment_url,
-        provider_payment_id: paychanguData.id || paychanguData.transaction_id,
+        checkout_url: null,
+        provider_payment_id: paychanguData.data?.ref_id || paychanguData.ref_id,
         amount: orderData.total_amount,
         currency: "MWK",
-        status: "pending",
+        status: "processing",
         order_number: orderData.order_number
       }),
       {
@@ -227,6 +305,7 @@ serve(async (req: Request) => {
   } catch (error: any) {
     console.error("Error creating payment:", error);
 
+    // Final catch block to ensure a structured response to the client
     return new Response(
       JSON.stringify({
         success: false,
