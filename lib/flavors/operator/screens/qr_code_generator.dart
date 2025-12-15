@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:math';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class QRCodeGeneratorPage extends StatefulWidget {
   final String establishmentId;
@@ -252,12 +255,82 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     );
   }
 
-  Future<void> _downloadQRCode(Map<String, dynamic> qrCode) async {
-    // Implement QR code download/saving functionality
-    // You can use packages like image_gallery_saver or share_plus
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Download functionality coming soon!')),
+  Future<void> _generatePdf(List<Map<String, dynamic>> codes) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                "Table QR Codes",
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Wrap(
+              spacing: 40,
+              runSpacing: 40,
+              children: codes.map((code) {
+                final tableNum = code['table_number'];
+                final label = code['label'] ?? 'Table';
+                final qrData = code['qr_code_data'] ?? '';
+
+                return pw.Container(
+                  width: 150,
+                  height: 200,
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(),
+                    borderRadius: pw.BorderRadius.circular(10),
+                  ),
+                  child: pw.Column(
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.BarcodeWidget(
+                        data: qrData,
+                        barcode: pw.Barcode.qrCode(),
+                        width: 100,
+                        height: 100,
+                      ),
+                      pw.SizedBox(height: 10),
+                      pw.Text(
+                        'Table $tableNum',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.Text(label, style: const pw.TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ];
+        },
+      ),
     );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
+  }
+
+  Future<void> _downloadQRCode(Map<String, dynamic> qrCode) async {
+    await _generatePdf([qrCode]);
+  }
+
+  Future<void> _downloadAllQRCodes() async {
+    if (_generatedQRCodes.isEmpty) {
+      _showErrorDialog('No QR codes to download');
+      return;
+    }
+    await _generatePdf(_generatedQRCodes);
   }
 
   Widget _buildQRCodeCard(Map<String, dynamic> qrCode, bool isDarkMode) {
@@ -744,13 +817,28 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
             const SizedBox(height: 24),
 
             // Generated QR Codes List
-            Text(
-              'Generated QR Codes',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Generated QR Codes',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
+                ),
+                if (_generatedQRCodes.isNotEmpty)
+                  ElevatedButton.icon(
+                    onPressed: _downloadAllQRCodes,
+                    icon: const Icon(Icons.download),
+                    label: const Text('Download All PDF'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 12),
 

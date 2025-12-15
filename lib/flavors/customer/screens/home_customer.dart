@@ -3,6 +3,7 @@ import '../../../../core/services/supabase_service.dart';
 import '../../../../core/models/menu_models.dart';
 import './menu_screen.dart';
 import './waiter_call_button.dart';
+import '../../../../core/widgets/customer_reservations_dialog.dart';
 
 class HomeCustomer extends StatefulWidget {
   final String establishmentId;
@@ -581,7 +582,45 @@ class _HomeCustomerState extends State<HomeCustomer> {
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 13,
-                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (context) =>
+                            const CustomerReservationsDialog(),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 14,
+                            color: _primaryColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            "My Reservations",
+                            style: TextStyle(
+                              color: _primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

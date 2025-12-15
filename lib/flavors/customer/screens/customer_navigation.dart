@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'paychangu_mobile.dart' if (dart.library.html) 'paychangu_web.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/widgets/reservation_dialog.dart';
+import '../../../../core/services/auth_service.dart';
 
 class CustomerNavigation extends StatefulWidget {
   final String establishmentId;
@@ -66,6 +68,22 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
           );
           // Optional: clear query params to avoid showing message on refresh?
           // Hard to do without reloading on web, but this is sufficient for user feedback.
+        }
+      });
+    }
+
+    // Check for pending reservation action
+    if (AuthService.pendingReservationAction) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        AuthService.pendingReservationAction = false;
+        if (mounted) {
+          showDialog(
+            context: context,
+            builder: (context) => ReservationDialog(
+              establishmentId: widget.establishmentId,
+              establishmentName: 'Restaurant', // Placeholder
+            ),
+          );
         }
       });
     }

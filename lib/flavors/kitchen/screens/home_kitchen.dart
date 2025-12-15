@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'tables_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'reservations_screen.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
 
@@ -170,6 +171,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           .neq('status', 'completed')
           .neq('status', 'cancelled')
           .neq('status', 'served') // Assuming served is history
+          .neq('table_no', 0)
           .order('created_at', ascending: true);
 
       print('DEBUG KDS: Found ${response.length} orders after filtering');
@@ -356,8 +358,6 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
       case 1:
         return _buildClosedOrdersView();
       case 2:
-        return _buildShoppingCartView();
-      case 3:
         if (_currentEstablishmentId.isEmpty) {
           return Center(
             child: Column(
@@ -388,11 +388,16 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
             );
           },
         );
-      case 4:
+      case 3:
         // Use default empty string if null, though it should be loaded by now
         return TablesPage(establishmentId: _currentEstablishmentId ?? '');
-      case 5:
+      case 4:
         return _buildAssistanceView();
+      case 5:
+        return ReservationsScreen(
+          establishmentId: _currentEstablishmentId,
+          isDarkMode: isDarkMode,
+        );
       default:
         return _buildDashboardView();
     }
@@ -1243,10 +1248,10 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           const SizedBox(height: 40),
           _buildSidebarIcon(Icons.dashboard, 0, 'Dashboard'),
           _buildSidebarIcon(Icons.close, 1, 'Closed Orders'),
-          _buildSidebarIcon(Icons.shopping_cart, 2, 'Shopping'),
-          _buildSidebarIcon(Icons.receipt, 3, 'Add Menu Item'),
-          _buildSidebarIcon(Icons.table_restaurant, 4, 'Tables'),
-          _buildSidebarIcon(Icons.notifications_active, 5, 'Assistance'),
+          _buildSidebarIcon(Icons.receipt, 2, 'Add Menu Item'),
+          _buildSidebarIcon(Icons.table_restaurant, 3, 'Tables'),
+          _buildSidebarIcon(Icons.notifications_active, 4, 'Assistance'),
+          _buildSidebarIcon(Icons.calendar_today, 5, 'Reservations'),
           const Spacer(),
           // Replaced Settings with Logout as requested ("place the logout where theres settings icon")
           GestureDetector(

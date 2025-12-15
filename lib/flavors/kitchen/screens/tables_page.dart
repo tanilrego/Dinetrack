@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/services/supabase_service.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 class TablesPage extends StatefulWidget {
   final String establishmentId;
@@ -12,6 +16,56 @@ class TablesPage extends StatefulWidget {
 
 class _TablesPageState extends State<TablesPage> {
   final SupabaseService _supabaseService = SupabaseService();
+  Map<String, String> _upcomingReservations = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUpcomingReservations();
+  }
+
+  Future<void> _fetchUpcomingReservations() async {
+    final now = DateTime.now();
+    final tomorrow = now.add(const Duration(days: 1));
+
+    try {
+      final response = await _supabaseService.client
+          .from('reservations')
+          .select('table_id, reservation_time')
+          .eq('establishment_id', widget.establishmentId)
+          .neq('status', 'cancelled')
+          .neq('status', 'completed')
+          .not('table_id', 'is', null)
+          .gte('reservation_time', now.toIso8601String())
+          .lt('reservation_time', tomorrow.toIso8601String());
+
+      final Map<String, String> newMap = {};
+      for (final res in response) {
+        final tableId = res['table_id'] as String;
+        final time = DateTime.parse(res['reservation_time'] as String);
+        final timeStr = DateFormat(
+          'EEE d, HH:mm',
+        ).format(time); // "Mon 15, 18:30"
+
+        // Simple logic: Show the earliest upcoming one
+        if (!newMap.containsKey(tableId)) {
+          newMap[tableId] = timeStr;
+        } else {
+          // If we have multiple, maybe just show the first one found (or sort them in query)
+          // ideally we want the earliest one.
+          // Since we didn't order by time in query, let's just stick with first found for simplicity or update query.
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _upcomingReservations = newMap;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching reservations: $e');
+    }
+  }
 
   Future<void> _markTableAvailable(String tableId) async {
     try {
@@ -37,6 +91,73 @@ class _TablesPageState extends State<TablesPage> {
         );
       }
     }
+  }
+
+  Future<void> _downloadQrCodes(List<Map<String, dynamic>> tables) async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        build: (context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                "Table QR Codes",
+                style: pw.TextStyle(
+                  fontSize: 24,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 20),
+            pw.Wrap(
+              spacing: 40,
+              runSpacing: 40,
+              children: tables.map((table) {
+                final tableNum = table['table_number'];
+                final estId = widget.establishmentId;
+                // Production URL structure
+                final qrData =
+                    'https://dinetrack-3hhc.onrender.com/#/restaurant/$estId?table=$tableNum';
+
+                return pw.Container(
+                  width: 150,
+                  height: 180,
+                  padding: const pw.EdgeInsets.all(10),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(),
+                    borderRadius: pw.BorderRadius.circular(10),
+                  ),
+                  child: pw.Column(
+                    mainAxisAlignment: pw.MainAxisAlignment.center,
+                    children: [
+                      pw.BarcodeWidget(
+                        data: qrData,
+                        barcode: pw.Barcode.qrCode(),
+                        width: 100,
+                        height: 100,
+                      ),
+                      pw.SizedBox(height: 10),
+                      pw.Text(
+                        'Table $tableNum',
+                        style: pw.TextStyle(
+                          fontSize: 16,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ];
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
   @override
@@ -70,17 +191,49 @@ class _TablesPageState extends State<TablesPage> {
                 ),
                 const SizedBox(height: 16),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildLegendItem(
-                      const Color(0xFF10B981),
-                      'Available',
-                      Icons.check_circle,
+                    Row(
+                      children: [
+                        _buildLegendItem(
+                          const Color(0xFF10B981),
+                          'Available',
+                          Icons.check_circle,
+                        ),
+                        const SizedBox(width: 24),
+                        _buildLegendItem(
+                          const Color(0xFFEF4444),
+                          'Occupied',
+                          Icons.cancel,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 24),
-                    _buildLegendItem(
-                      const Color(0xFFEF4444),
-                      'Occupied',
-                      Icons.cancel,
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        // We need to fetch tables locally or pass them?
+                        // We can't access snapshot data here directly.
+                        // We should fetch latest specific for print.
+                        final tables = await _supabaseService.client
+                            .from('tables')
+                            .select()
+                            .eq('establishment_id', widget.establishmentId)
+                            .order('table_number');
+                        final List<Map<String, dynamic>> tableList =
+                            List<Map<String, dynamic>>.from(tables);
+                        if (tableList.isNotEmpty) {
+                          _downloadQrCodes(tableList);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('No tables found')),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.qr_code),
+                      label: const Text('Download QR Codes'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4F46E5),
+                        foregroundColor: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -351,6 +504,44 @@ class _TablesPageState extends State<TablesPage> {
                   fontWeight: FontWeight.w500,
                 ),
               ),
+            // Upcoming Reservation
+            if (_upcomingReservations.containsKey(table['id']))
+              Padding(
+                padding: const EdgeInsets.only(top: 8.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: Colors.blue.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.access_time,
+                        size: 12,
+                        color: Colors.blue,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Rsrvd: ${_upcomingReservations[table['id']]}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
             // Mark Available Button
             if (isOccupied) ...[
               const SizedBox(height: 10),

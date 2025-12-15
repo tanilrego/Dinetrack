@@ -888,7 +888,8 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           _buildSidebarIcon(Icons.restaurant_menu, 1),
           _buildSidebarIcon(Icons.receipt_long, 2),
           _buildSidebarIcon(Icons.qr_code_2, 3),
-          _buildSidebarIcon(Icons.inventory_2_outlined, 4),
+
+          _buildSidebarIcon(Icons.analytics_outlined, 4), // Analytics
           _buildSidebarIcon(Icons.people, 5),
           const Spacer(),
           // Logout Icon
