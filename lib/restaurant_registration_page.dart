@@ -25,7 +25,9 @@ class _RestaurantRegistrationPageState
   final TextEditingController restaurantNameCtrl = TextEditingController();
   final TextEditingController locationCtrl = TextEditingController();
   final TextEditingController phoneCtrl = TextEditingController();
-  final TextEditingController typeCtrl = TextEditingController();
+  final TextEditingController typeCtrl = TextEditingController(
+    text: 'restaurant',
+  );
   final TextEditingController descriptionCtrl = TextEditingController();
 
   // Admin fields
@@ -194,12 +196,80 @@ class _RestaurantRegistrationPageState
                           validatorMsg: "Enter phone number",
                         ),
 
-                        _buildTextField(
-                          controller: typeCtrl,
-                          label: "Restaurant Type",
-                          hint: "e.g., Fast Food, Café, Fine Dining",
-                          icon: Icons.category,
-                          validatorMsg: "Enter restaurant type",
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Restaurant Type",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF374151),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              DropdownButtonFormField<String>(
+                                value: typeCtrl.text.isEmpty
+                                    ? 'restaurant'
+                                    : typeCtrl.text,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: 'restaurant',
+                                    child: Text('Restaurant'),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: 'pub',
+                                    child: Text('Pub'),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    typeCtrl.text = val;
+                                  }
+                                },
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: const Color(0xFFF9FAFB),
+                                  prefixIcon: const Icon(
+                                    Icons.category,
+                                    color: Color(0xFF6B7280),
+                                    size: 22,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFFE5E7EB),
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF4F46E5),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 16,
+                                  ),
+                                ),
+                                validator: (val) {
+                                  if (val == null || val.isEmpty) {
+                                    return "Select restaurant type";
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ],
+                          ),
                         ),
 
                         _buildTextField(
