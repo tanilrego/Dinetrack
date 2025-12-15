@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../../landing_page.dart';
 // ignore: avoid_web_libraries_in_flutter
 // import 'dart:html' as html; // Deprecated
 
@@ -68,17 +69,12 @@ class _SupervisorPageState extends State<SupervisorPage>
                         onPressed: () async {
                           await supabase.auth.signOut();
                           if (mounted) {
-                            if (kIsWeb) {
-                              // html.window.location.reload(); // Deprecated
-                              Navigator.pop(context); // Just pop for now
-                            } else {
-                              Navigator.pop(context);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Logged out successfully'),
-                                ),
-                              );
-                            }
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const LandingPage(),
+                              ),
+                              (route) => false,
+                            );
                           }
                         },
                         style: ElevatedButton.styleFrom(
@@ -938,16 +934,35 @@ class _SupervisorPageState extends State<SupervisorPage>
     try {
       final response = await supabase
           .from('subscriptions')
-          .select('*, restaurants(name)')
+          .select('*, establishments(name)')
           .order('created_at', ascending: false);
+
       return List<Map<String, dynamic>>.from(response).map((sub) {
+        final planType = sub['plan_type'] as String? ?? 'Monthly';
+        final status = sub['status'] as String? ?? 'pending';
+        final startDate = sub['start_date'] != null
+            ? (sub['start_date'] as String).split('T')[0]
+            : 'N/A';
+        final endDate = sub['end_date'] != null
+            ? (sub['end_date'] as String).split('T')[0]
+            : 'N/A';
+        final price = sub['amount']?.toString() ?? '0.00';
+
         return {
-          ...sub,
-          'restaurant_name': sub['restaurants']['name'] ?? 'Unknown',
+          'id': sub['id'],
+          'restaurant_name': sub['establishments']?['name'] ?? 'Unknown',
+          'plan_type': planType.isNotEmpty
+              ? '${planType[0].toUpperCase()}${planType.substring(1)}'
+              : 'Monthly',
+          'status': status,
+          'start_date': startDate,
+          'end_date': endDate,
+          'price': price,
         };
       }).toList();
     } catch (e) {
-      throw 'Error fetching subscriptions: $e';
+      debugPrint('Error fetching subscriptions: $e');
+      return [];
     }
   }
 

@@ -367,13 +367,122 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
               .eq('id', userId)
               .single();
 
+          String paymentEmail =
+              customerData['email'] ?? '$userId@dinetrack.com';
+          String paymentPhone = customerData['phone'] ?? '';
+
           // Parse customer name
-          final fullName = customerData['full_name'] as String? ?? 'Customer';
-          final nameParts = fullName.split(' ');
+          final fullNameStr =
+              customerData['full_name'] as String? ?? 'Customer';
+          final nameParts = fullNameStr.split(' ');
           final firstName = nameParts.isNotEmpty ? nameParts[0] : 'Customer';
           final lastName = nameParts.length > 1
               ? nameParts.sublist(1).join(' ')
               : 'Name';
+
+          // CHECK IF GUEST OR MISSING PHONE
+          // Guest email check: contains 'guest' and 'dinetrack.com' or just check if it matches the generated guest email pattern
+          bool isGuest =
+              paymentEmail.contains('guest') ||
+              paymentEmail.endsWith('@dinetrack.com');
+          bool missingPhone = paymentPhone.isEmpty;
+
+          if (isGuest || missingPhone) {
+            // Prompt for details
+            if (mounted) {
+              final result = await showDialog<Map<String, String>>(
+                context: context,
+                barrierDismissible: false,
+                builder: (context) {
+                  final emailController = TextEditingController(
+                    text: isGuest ? '' : paymentEmail,
+                  );
+                  final phoneController = TextEditingController(
+                    text: paymentPhone,
+                  );
+                  final formKey = GlobalKey<FormState>();
+
+                  return AlertDialog(
+                    title: const Text('Contact Details Required'),
+                    content: Form(
+                      key: formKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            'Mobile money payment requires a valid phone number and email.',
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: phoneController,
+                            decoration: const InputDecoration(
+                              labelText: 'Mobile Number',
+                              hintText: 'e.g., 0991234567',
+                              prefixIcon: Icon(Icons.phone),
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.phone,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter a mobile number';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: emailController,
+                            decoration: const InputDecoration(
+                              labelText: 'Email Address',
+                              hintText: 'name@example.com',
+                              prefixIcon: Icon(Icons.email),
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter an email';
+                              }
+                              if (!value.contains('@')) {
+                                return 'Invalid email address';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () =>
+                            Navigator.pop(context), // Cancel -> returns null
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (formKey.currentState!.validate()) {
+                            Navigator.pop(context, {
+                              'email': emailController.text.trim(),
+                              'phone': phoneController.text.trim(),
+                            });
+                          }
+                        },
+                        child: const Text('Continue'),
+                      ),
+                    ],
+                  );
+                },
+              );
+
+              if (result == null) {
+                // User cancelled the dialog
+                throw 'Payment cancelled: Contact details required';
+              }
+
+              paymentEmail = result['email']!;
+              paymentPhone = result['phone']!;
+            }
+          }
 
           // PLATFORM CHECK
           final isDesktop =
@@ -397,7 +506,9 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                 'order_id': orderId,
                 'payer_customer_id': userId,
                 // 'payment_method': 'mobile_money', // Default in edge function
-                'phone_number': customerData['phone'] ?? '',
+                'phone_number': paymentPhone, // Use provided phone
+                'email':
+                    paymentEmail, // Pass email if supported by edge function
                 'return_url': kIsWeb ? Uri.base.toString() : null,
               },
             );
@@ -486,8 +597,16 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
             }
           } else if (kIsWeb) {
             // --- WEB FLOW: Navigate to PaychanguInlinePaymentScreen ---
-            // Import the payment screen and navigate to it
-            // This screen uses iframe embedding for web
+            // Update user details temporarily for this session if needed?
+            // The PayChanguInlinePaymentScreen might re-fetch user details.
+            // We should pass the phone/email to it.
+
+            // Updating the screen to accept phone/email override would be best,
+            // but for now let's pass it via arguments if possible, or update the DB temporarily?
+            // User requested NOT to save in DB.
+            // But PaychanguInlinePaymentScreen fetches data itself.
+            // Solution: We need to modify PaychanguInlinePaymentScreen to accept `email` and `phone` overrides.
+
             if (mounted) {
               await Navigator.of(context).push(
                 MaterialPageRoute(
@@ -496,6 +615,9 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
                     transactionReference: txRef,
                     orderId: orderId,
                     secretKey: 'SEC-TEST-awHuCpW5cLHMeMSCf9Swix4qo6qj9mXH',
+                    // Pass the captured details
+                    customerEmail: paymentEmail,
+                    customerPhone: paymentPhone,
                     onSuccess: () {
                       _handlePaymentSuccess(orderId);
                     },
@@ -527,8 +649,7 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
               currency: Currency.MWK,
               firstName: firstName,
               lastName: lastName,
-              email:
-                  customerData['email'] as String? ?? '$userId@dinetrack.com',
+              email: paymentEmail, // Use captured email
               callbackUrl:
                   'https://xsflgrmqvnggtdggacrd.supabase.co/functions/v1/paychangu-webhook',
               returnUrl:
@@ -550,6 +671,8 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
               'payer_customer_id': userId,
               'metadata': {
                 'tx_ref': txRef,
+                'email': paymentEmail, // Store in metadata for reference
+                'phone': paymentPhone,
                 'created_at': DateTime.now().toIso8601String(),
               },
             });

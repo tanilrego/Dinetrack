@@ -19,6 +19,9 @@ class PaychanguInlinePaymentScreen extends StatefulWidget {
   final Function(String) onFailure;
   final VoidCallback onCancel;
   final String secretKey;
+  final String? customerEmail;
+  final String? customerPhone;
+  final String? payerId;
 
   const PaychanguInlinePaymentScreen({
     super.key,
@@ -29,6 +32,9 @@ class PaychanguInlinePaymentScreen extends StatefulWidget {
     required this.onFailure,
     required this.onCancel,
     required this.secretKey,
+    this.customerEmail,
+    this.customerPhone,
+    this.payerId,
   });
 
   @override
@@ -42,6 +48,9 @@ class _PaychanguInlinePaymentScreenState
   bool _isRedirectInProgress = false;
   RealtimeChannel? _orderSubscription;
   String? _currentPaymentId; // For test bypass button
+
+  bool _hasCompleted = false; // Guard to prevent multiple pops
+  bool _hasInitialized = false; // Prevent infinite loop on web
 
   @override
   void initState() {
@@ -104,8 +113,9 @@ class _PaychanguInlinePaymentScreenState
       'amount': (order['total_amount'] * 100).round(),
       'first_name': fullName.first,
       'last_name': fullName.length > 1 ? fullName.sublist(1).join(' ') : 'User',
-      'email': customer['email'] ?? '$userId@dinetrack.com',
-      'phone': customer['phone'] ?? '',
+      'email':
+          widget.customerEmail ?? customer['email'] ?? '$userId@dinetrack.com',
+      'phone': widget.customerPhone ?? customer['phone'] ?? '',
       'establishment_id': order['establishment_id'],
       'establishment_name': establishmentName,
     };
@@ -142,6 +152,8 @@ class _PaychanguInlinePaymentScreenState
           callback: (payload) {
             final status = payload.newRecord['payment_status'];
             if (status == 'paid') {
+              if (_hasCompleted) return;
+              _hasCompleted = true;
               widget.onSuccess();
               if (mounted) Navigator.pop(context);
               _orderSubscription?.unsubscribe();
@@ -170,12 +182,16 @@ class _PaychanguInlinePaymentScreenState
           final status = response.data['status'];
 
           if (status == 'completed' || status == 'paid') {
+            if (_hasCompleted) return;
+            _hasCompleted = true;
             widget.onSuccess();
             if (mounted) Navigator.pop(context);
             return; // Stop polling
           }
 
           if (status == 'failed' || status == 'refunded') {
+            if (_hasCompleted) return;
+            _hasCompleted = true;
             widget.onFailure('Payment Failed: $status');
             if (mounted) Navigator.pop(context);
             return; // Stop polling
@@ -219,6 +235,8 @@ class _PaychanguInlinePaymentScreenState
 
       // 3. Trigger success callback
       if (mounted) {
+        if (_hasCompleted) return;
+        _hasCompleted = true;
         widget.onSuccess();
         Navigator.pop(context);
       }
@@ -232,16 +250,16 @@ class _PaychanguInlinePaymentScreenState
 
   @override
   Widget build(BuildContext context) {
-    final user = _supabase.auth.currentUser;
+    final userId = widget.payerId ?? _supabase.auth.currentUser?.id;
 
-    if (user == null) {
+    if (userId == null) {
       return const Scaffold(
         body: Center(child: Text('User not authenticated')),
       );
     }
 
     return FutureBuilder<Map<String, dynamic>>(
-      future: _fetchPaymentData(_supabase, user.id, widget.orderId),
+      future: _fetchPaymentData(_supabase, userId, widget.orderId),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
@@ -258,43 +276,89 @@ class _PaychanguInlinePaymentScreenState
         if (_isWeb) {
           // Web uses text redirection approach
           WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (_isRedirectInProgress) return;
+            if (_hasInitialized || _isRedirectInProgress) return;
+            _hasInitialized = true;
 
             String urlToLaunch = widget.checkoutUrl;
             String paymentId = ''; // Variable to capture payment ID
 
             // If URL is empty, we must fetch it first
             if (urlToLaunch.isEmpty) {
+              // Check for existing pending payment to prevent duplicates
               try {
-                final res = await _supabase.functions.invoke(
-                  'create-paychangu-payment',
-                  body: {
-                    'order_id': widget.orderId,
-                    'payer_customer_id': user.id,
-                    'phone_number': data['phone'] ?? '',
-                    'return_url': Uri.base.toString(),
-                  },
-                );
+                final existingPayment = await _supabase
+                    .from('payments')
+                    .select('id, checkout_url, status')
+                    .eq('order_id', widget.orderId)
+                    // Check for all statuses to handle completion gracefully
+                    .inFilter('status', [
+                      'pending',
+                      'processing',
+                      'completed',
+                      'paid',
+                    ])
+                    .order('created_at', ascending: false)
+                    .limit(1)
+                    .maybeSingle();
 
-                if (res.status == 200 && res.data != null) {
-                  urlToLaunch = res.data['checkout_url'] ?? '';
-                  // 🌟 CRITICAL FIX: CAPTURE THE PAYMENT ID
-                  paymentId = res.data['payment_id'] ?? '';
-                  if (mounted) {
-                    setState(() {
-                      _currentPaymentId = paymentId;
-                    });
+                if (existingPayment != null) {
+                  // If already paid, success!
+                  final status = existingPayment['status'];
+                  if (status == 'completed' || status == 'paid') {
+                    debugPrint(
+                      'Payment already completed: ${existingPayment['id']}',
+                    );
+                    if (mounted) {
+                      widget.onSuccess();
+                      Navigator.pop(context);
+                    }
+                    return;
                   }
-                } else {
-                  throw 'Failed to generate payment URL';
+
+                  paymentId = existingPayment['id'];
+                  urlToLaunch = existingPayment['checkout_url'] ?? '';
+                  if (mounted) {
+                    setState(() => _currentPaymentId = paymentId);
+                  }
+                  debugPrint('Resuming existing payment: $paymentId');
                 }
               } catch (e) {
-                debugPrint('Error fetching payment URL: $e');
-                if (mounted) {
-                  widget.onFailure('Could not initialize payment: $e');
-                  Navigator.pop(context);
+                debugPrint('Error checking existing payment: $e');
+              }
+
+              // If still no payment ID, create a new one
+              if (paymentId.isEmpty) {
+                try {
+                  final res = await _supabase.functions.invoke(
+                    'create-paychangu-payment',
+                    body: {
+                      'order_id': widget.orderId,
+                      'payer_customer_id': userId,
+                      'phone_number': data['phone'] ?? '',
+                      'return_url': Uri.base.toString(),
+                    },
+                  );
+
+                  if (res.status == 200 && res.data != null) {
+                    urlToLaunch = res.data['checkout_url'] ?? '';
+                    // 🌟 CRITICAL FIX: CAPTURE THE PAYMENT ID
+                    paymentId = res.data['payment_id'] ?? '';
+                    if (mounted) {
+                      setState(() {
+                        _currentPaymentId = paymentId;
+                      });
+                    }
+                  } else {
+                    throw 'Failed to generate payment URL';
+                  }
+                } catch (e) {
+                  debugPrint('Error fetching payment URL: $e');
+                  if (mounted) {
+                    widget.onFailure('Could not initialize payment: $e');
+                    Navigator.pop(context);
+                  }
+                  return;
                 }
-                return;
               }
             }
 
@@ -413,7 +477,7 @@ class _PaychanguInlinePaymentScreenState
           returnUrl: 'https://dinetrack-3hhc.onrender.com/#/order-complete',
           meta: {
             'order_id': widget.orderId,
-            'customer_id': user.id,
+            'customer_id': userId,
             'establishment_id': data['establishment_id'],
           },
         );

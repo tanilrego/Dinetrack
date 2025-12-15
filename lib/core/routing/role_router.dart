@@ -35,12 +35,14 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
 
   Future<void> _loadUserRole() async {
     final authService = AuthService();
-    final role = await authService.getUserRole();
+    final role = await authService.getUserRole(userId: widget.userId);
 
-    setState(() {
-      _userRole = role;
-      _loading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _userRole = role;
+        _loading = false;
+      });
+    }
   }
 
   @override

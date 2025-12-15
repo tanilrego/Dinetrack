@@ -100,7 +100,8 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           .select('total_amount')
           .gte('created_at', DateTime.now().toIso8601String().split('T')[0])
           .eq('establishment_id', _currentEstablishmentId)
-          .eq('payment_status', 'paid');
+          .eq('payment_status', 'paid')
+          .neq('table_no', 0); // Exclude subscription orders
 
       totalSales = (salesData as List).fold(
         0.0,

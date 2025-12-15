@@ -4,21 +4,21 @@ class AuthService {
   final SupabaseService _supabase = SupabaseService();
   static String? pendingEstablishmentId;
 
-  Future<Map<String, dynamic>?> getCurrentUserProfile() async {
-    final userId = _supabase.currentUserId;
-    if (userId == null) return null;
+  Future<Map<String, dynamic>?> getCurrentUserProfile({String? userId}) async {
+    final targetId = userId ?? _supabase.currentUserId;
+    if (targetId == null) return null;
 
     final response = await _supabase.client
         .from('users')
         .select()
-        .eq('id', userId)
+        .eq('id', targetId)
         .single();
 
     return response;
   }
 
-  Future<String?> getUserRole() async {
-    final profile = await getCurrentUserProfile();
+  Future<String?> getUserRole({String? userId}) async {
+    final profile = await getCurrentUserProfile(userId: userId);
     return profile?['user_type'];
   }
 

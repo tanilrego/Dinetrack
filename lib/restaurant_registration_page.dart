@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dinetrack/login_page.dart';
-import 'package:dinetrack/core/routing/role_router.dart';
+
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'flavors/customer/screens/paychangu_payment_screen.dart';
 
 class RestaurantRegistrationPage extends StatefulWidget {
   const RestaurantRegistrationPage({super.key});
@@ -525,8 +527,9 @@ class _RestaurantRegistrationPageState
             'type': typeCtrl.text.trim(),
             'description': descriptionCtrl.text.trim(),
             'owner_id': userId,
-            'is_active': true,
-            'supervisor_approved': false, // Explicitly set for pending approval
+            'is_active':
+                false, // 🌟 Changed to false: Active only after payment
+            'supervisor_approved': false,
             'created_at': DateTime.now().toIso8601String(),
           })
           .select()
@@ -545,33 +548,74 @@ class _RestaurantRegistrationPageState
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Success!
+      // 4. Create Subscription Order (Pending Payment)
+      final subOrderRes = await _supabase
+          .from('orders')
+          .insert({
+            'establishment_id': establishmentId,
+            'customer_id': userId,
+            // 'table_id': null, // Omitted as per request (Tables should be created by operator)
+            'status': 'pending',
+            'payment_status': 'pending',
+            'total_amount': 25000.0, // Fixed Subscription Fee (MK 25,000)
+            'table_no': 0,
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select()
+          .single();
+
+      final orderId = subOrderRes['id'];
+
+      // 4.5 Create Subscription Record (New Table)
+      final subRes = await _supabase
+          .from('subscriptions')
+          .insert({
+            'establishment_id': establishmentId,
+            'plan_type': 'monthly',
+            'status': 'pending',
+            'amount': 25000.0,
+            'created_at': DateTime.now().toIso8601String(),
+          })
+          .select()
+          .single();
+      final subscriptionId = subRes['id'];
+
+      // 5. Navigate to Payment Screen
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 12),
-                Text('Restaurant registered successfully!'),
-              ],
-            ),
-            backgroundColor: Color(0xFF10B981),
-            duration: Duration(seconds: 3),
+            content: Text('Restaurant created! Redirecting to payment...'),
+            backgroundColor: Color(0xFF4F46E5),
           ),
         );
 
-        // Navigate to dashboard via RoleBasedRouter
-        await Future.delayed(
-          const Duration(seconds: 1),
-        ); // Short delay for snackbar
-        if (mounted) {
-          Navigator.pushAndRemoveUntil(
-            context,
-            MaterialPageRoute(builder: (_) => RoleBasedRouter(userId: userId)),
-            (route) => false,
-          );
-        }
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaychanguInlinePaymentScreen(
+              checkoutUrl: '', // Will be generated
+              transactionReference:
+                  'sub-${DateTime.now().millisecondsSinceEpoch}',
+              orderId: orderId,
+              // Use Env key or fallback to test key
+              secretKey:
+                  dotenv.env['PAYCHANGU_PUBLIC_KEY'] ??
+                  'SEC-TEST-awHuCpW5cLHMeMSCf9Swix4qo6qj9mXH',
+              customerEmail: adminEmailCtrl.text.trim(),
+              customerPhone: phoneCtrl.text.trim(),
+              payerId: userId,
+              onSuccess: () => _activateSubscription(
+                establishmentId,
+                orderId,
+                userId,
+                subscriptionId,
+              ),
+              onFailure: (err) => _handlePaymentError(err, userId),
+              onCancel: () => _handlePaymentError('Payment Cancelled', userId),
+            ),
+          ),
+        );
+        // Note: _activateSubscription handles the navigation to dashboard on success
       }
     } on AuthException catch (e) {
       if (mounted) {
@@ -626,5 +670,79 @@ class _RestaurantRegistrationPageState
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  Future<void> _activateSubscription(
+    String establishmentId,
+    String orderId,
+    String userId,
+    String subscriptionId,
+  ) async {
+    try {
+      // Call Edge Function to activate directly using order_id
+      // The function runs as Service Role and can find the valid payment even if RLS hides it from client
+      final res = await _supabase.functions.invoke(
+        'activate-subscription',
+        body: {
+          'establishment_id': establishmentId,
+          'order_id': orderId,
+          'subscription_id': subscriptionId,
+        },
+      );
+
+      if (res.status != 200) {
+        throw 'Activation failed: ${res.data}';
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Subscription activated! Please log in to continue.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+
+        // Go to Login Page
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginPage()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      _handlePaymentError(
+        'Activation Error: This usually means payment confirmation is delayed. $e',
+        userId,
+      );
+    }
+  }
+
+  void _handlePaymentError(String message, String userId) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFEF4444),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Go to Login',
+          textColor: Colors.white,
+          onPressed: () {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const LoginPage()),
+              (route) => false,
+            );
+          },
+        ),
+      ),
+    );
+
+    // Navigate to Login Page
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
   }
 }

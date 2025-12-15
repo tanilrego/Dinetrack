@@ -40,8 +40,8 @@ dependencies:
   path_provider: ^2.1.0
 
   # PDF & Printing
+  pdf: ^3.10.0
   printing: ^5.11.0
-  pdf: ^3.10.3
 
   # Image processing
   image: ^4.1.4

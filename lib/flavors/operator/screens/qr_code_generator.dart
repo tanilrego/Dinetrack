@@ -99,9 +99,11 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     return 'table-$_tableNumber-$uniqueCode';
   }
 
-  String _generateQRCodeData(String qrCodeId) {
-    // Production URL for deployed app
-    return 'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}';
+  String _generateQRCodeData(String tableUuid) {
+    // Production URL for deployed app with table_id parameter
+    // The format matches what main.dart expects: #/restaurant/{id}?table_id={uuid}
+    // Note: Placing query param at the end ensures main.dart parsing logic works (split('?').last)
+    return 'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}?table_id=$tableUuid';
   }
 
   Future<void> _generateQRCode() async {
@@ -133,23 +135,42 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
 
     try {
       final qrCodeId = _generateUniqueQRCode();
-      final qrCodeData = _generateQRCodeData(qrCodeId);
+      // Insert with placeholder data first to get the UUID
 
-      // Insert into Supabase
       final response = await _supabase.from('tables').insert({
         'establishment_id': widget.establishmentId,
         'label': _tableLabelController.text.trim(),
         'table_number': _tableNumber,
         'qr_code': qrCodeId,
-        'qr_code_data': qrCodeData,
+        'qr_code_data': 'PENDING', // Placeholder
         'capacity': int.tryParse(_capacityController.text) ?? 4,
         'is_available': true,
       }).select();
 
       if (response.isNotEmpty) {
+        final tableId = response[0]['id'] as String;
+
+        // Now generate the real URL using the table UUID
+        final qrCodeData = _generateQRCodeData(tableId);
+
+        // Update the row with the correct QR data
+        final updatedResponse = await _supabase
+            .from('tables')
+            .update({'qr_code_data': qrCodeData})
+            .eq('id', tableId)
+            .select();
+
+        final finalTable = updatedResponse.isNotEmpty
+            ? updatedResponse[0]
+            : response[0];
+        // Manually update the map if update returned nothing (shouldn't happen but safe)
+        if (updatedResponse.isNotEmpty) {
+          finalTable['qr_code_data'] = qrCodeData;
+        }
+
         // Add to local list
         setState(() {
-          _generatedQRCodes.insert(0, response[0]);
+          _generatedQRCodes.insert(0, finalTable);
         });
 
         // Reset form
