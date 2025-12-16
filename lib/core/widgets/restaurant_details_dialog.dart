@@ -4,11 +4,13 @@ import 'package:dinetrack/core/widgets/reservation_dialog.dart';
 class RestaurantDetailsDialog extends StatelessWidget {
   final Map<String, dynamic> restaurant;
   final VoidCallback onVisitPressed;
+  final String? initialTableNumber;
 
   const RestaurantDetailsDialog({
     super.key,
     required this.restaurant,
     required this.onVisitPressed,
+    this.initialTableNumber,
   });
 
   @override

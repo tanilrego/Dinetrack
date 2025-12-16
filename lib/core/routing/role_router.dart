@@ -10,13 +10,13 @@ import '../../flavors/supervisor/screens/home_supervisor.dart';
 class RoleBasedRouter extends StatefulWidget {
   final String userId;
   final String? pendingEstablishmentId;
-  final String? tableId;
+  final String? initialTableNumber;
 
   const RoleBasedRouter({
     super.key,
     required this.userId,
     this.pendingEstablishmentId,
-    this.tableId,
+    this.initialTableNumber,
   });
 
   @override
@@ -55,11 +55,13 @@ class _RoleBasedRouterState extends State<RoleBasedRouter> {
       case 'customer':
         final targetId =
             widget.pendingEstablishmentId ?? AuthService.pendingEstablishmentId;
+        final tableNum =
+            widget.initialTableNumber ?? AuthService.pendingTableNumber;
 
         if (targetId != null) {
           return CustomerNavigation(
             establishmentId: targetId,
-            tableId: widget.tableId,
+            initialTableNumber: tableNum,
           );
         }
 

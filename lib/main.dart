@@ -126,9 +126,9 @@ class _AuthGateState extends State<AuthGate> {
 
       // If user is already logged in, we must force sign out so they land on
       // the LandingPage which handles the "View Details / Login" popup for the new restaurant.
-      if (newId != null) {
-        Supabase.instance.client.auth.signOut();
-      }
+      // If user is already logged in, we must force sign out so they land on
+      // the LandingPage which handles the "View Details / Login" popup for the new restaurant.
+      Supabase.instance.client.auth.signOut();
     }
   }
 
@@ -207,7 +207,7 @@ class _AuthGateState extends State<AuthGate> {
         return RoleBasedRouter(
           userId: session.user.id,
           pendingEstablishmentId: _pendingEstablishmentId,
-          tableId: _pendingTableId,
+          initialTableNumber: _pendingTableId,
         );
       },
     );

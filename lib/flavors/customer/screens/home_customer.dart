@@ -586,12 +586,26 @@ class _HomeCustomerState extends State<HomeCustomer> {
                   ),
                   const SizedBox(height: 12),
                   GestureDetector(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (context) =>
-                            const CustomerReservationsDialog(),
-                      );
+                    onTap: () async {
+                      // Fetch current establishment name first if not already loaded available
+                      // We can await the future here or cache it
+                      String? estName;
+                      try {
+                        final est = await _establishmentFuture;
+                        estName = est?['name'];
+                      } catch (e) {
+                        // ignore
+                      }
+
+                      if (context.mounted) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => CustomerReservationsDialog(
+                            establishmentId: widget.establishmentId,
+                            currentEstablishmentName: estName,
+                          ),
+                        );
+                      }
                     },
                     child: Container(
                       padding: const EdgeInsets.symmetric(

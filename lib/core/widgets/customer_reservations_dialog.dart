@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/widgets/reservation_dialog.dart';
 
 class CustomerReservationsDialog extends StatefulWidget {
-  const CustomerReservationsDialog({super.key});
+  final String? establishmentId;
+  final String? currentEstablishmentName;
+
+  const CustomerReservationsDialog({
+    super.key,
+    this.establishmentId,
+    this.currentEstablishmentName,
+  });
 
   @override
   State<CustomerReservationsDialog> createState() =>
@@ -73,7 +81,7 @@ class _CustomerReservationsDialogState
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
         padding: const EdgeInsets.all(24),
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 650),
         child: Column(
           children: [
             Row(
@@ -97,21 +105,44 @@ class _CustomerReservationsDialogState
             if (_isLoading)
               const Expanded(child: Center(child: CircularProgressIndicator()))
             else if (_reservations.isEmpty)
-              const Expanded(
+              Expanded(
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.calendar_today_outlined,
                         size: 48,
                         color: Colors.grey,
                       ),
-                      SizedBox(height: 16),
-                      Text(
+                      const SizedBox(height: 16),
+                      const Text(
                         'No reservations found',
                         style: TextStyle(color: Colors.grey),
                       ),
+                      if (widget.establishmentId != null) ...[
+                        const SizedBox(height: 24),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(context); // Close current
+                            showDialog(
+                              // Open new
+                              context: context,
+                              builder: (context) => ReservationDialog(
+                                establishmentId: widget.establishmentId!,
+                                establishmentName:
+                                    widget.currentEstablishmentName ??
+                                    'Restaurant',
+                              ),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF4F46E5),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text('Make a Reservation Now'),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -257,6 +288,37 @@ class _CustomerReservationsDialogState
                   },
                 ),
               ),
+
+            // New Footer Button
+            if (widget.establishmentId != null) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    showDialog(
+                      context: context,
+                      builder: (context) => ReservationDialog(
+                        establishmentId: widget.establishmentId!,
+                        establishmentName:
+                            widget.currentEstablishmentName ?? 'Restaurant',
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Book a Table'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

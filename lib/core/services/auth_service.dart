@@ -3,6 +3,7 @@ import 'supabase_service.dart';
 class AuthService {
   final SupabaseService _supabase = SupabaseService();
   static String? pendingEstablishmentId;
+  static String? pendingTableNumber;
   static bool pendingReservationAction = false;
 
   Future<Map<String, dynamic>?> getCurrentUserProfile({String? userId}) async {

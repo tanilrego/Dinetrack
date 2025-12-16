@@ -16,12 +16,12 @@ import '../../../../core/services/auth_service.dart';
 
 class CustomerNavigation extends StatefulWidget {
   final String establishmentId;
-  final String? tableId;
+  final String? initialTableNumber;
 
   const CustomerNavigation({
     super.key,
     required this.establishmentId,
-    this.tableId,
+    this.initialTableNumber,
   });
 
   @override
@@ -43,10 +43,12 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   @override
   void initState() {
     super.initState();
-    // Use passed tableId if available
-    if (widget.tableId != null) {
-      _resolvedTableId = widget.tableId;
+    // Use passed table number if available to find ID
+    if (widget.initialTableNumber != null) {
+      _resolveInitialTableNumber();
     }
+
+    _calculateCartTotal();
     // If not passed (Manual), we do NOT prompt yet. We prompt at checkout.
 
     _calculateCartTotal();
@@ -97,6 +99,39 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
         (total, item) => total + (item.menuItem.price * item.quantity),
       );
     });
+  }
+
+  Future<void> _resolveInitialTableNumber() async {
+    if (widget.initialTableNumber == null) return;
+
+    try {
+      // Clean parsing
+      final tableNumStr = widget.initialTableNumber!.replaceAll(
+        RegExp(r'[^0-9]'),
+        '',
+      );
+      if (tableNumStr.isEmpty) return;
+
+      final tableNum = int.parse(tableNumStr);
+
+      final data = await _supabaseService.client
+          .from('tables')
+          .select('id')
+          .eq('establishment_id', widget.establishmentId)
+          .eq('table_number', tableNum)
+          .maybeSingle();
+
+      if (mounted && data != null) {
+        setState(() {
+          _resolvedTableId = data['id'];
+        });
+        print(
+          'DEBUG: Context resolved table number $tableNum to UUID: $_resolvedTableId',
+        );
+      }
+    } catch (e) {
+      print('DEBUG: Failed to resolve initial table context: $e');
+    }
   }
 
   // Previously _resolveTableId was called in initState. We removed that.

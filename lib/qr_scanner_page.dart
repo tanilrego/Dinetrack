@@ -23,31 +23,46 @@ class _QRScannerPageState extends State<QRScannerPage> {
     super.dispose();
   }
 
-  String? _parseIdFromCode(String code) {
-    // Handle full URL: https://dinetrack.com/#/restaurant/123
-    // Handle deep link strategy: #/restaurant/123
-    // Handle raw ID: 123
+  Map<String, String?>? _parseDataFromCode(String code) {
+    // Handle full URL: https://dinetrack.com/#/restaurant/123?table=5
+    // Handle deep link strategy: #/restaurant/123?table=5
+    // Return { 'id': '123', 'table': '5' }
     try {
+      String? id;
+      String? table;
+
       if (code.contains('/restaurant/')) {
-        // If it's a URL, pathSegments might work depending on format
-        // But often QR codes are just string dumps.
-        // Let's use simple string splitting for robustness with hash routing
         final parts = code.split('/restaurant/');
         if (parts.length > 1) {
-          // Take the part after /restaurant/ and clean it (remove ?query=...)
           String idPart = parts.last;
+
+          // Check for query params
           if (idPart.contains('?')) {
-            idPart = idPart.split('?').first;
+            final queryParts = idPart.split('?');
+            id = queryParts.first;
+
+            final query = queryParts.last;
+            final params = Uri.splitQueryString(query);
+            if (params.containsKey('table')) {
+              table = params['table'];
+            }
+          } else {
+            id = idPart;
           }
-          if (idPart.contains('#')) {
-            // unlikely if we split by /restaurant/ which usually comes after hash,
-            // but strictly speaking, hash comes first in flutter web unless standard path strategy
-          }
-          return idPart;
         }
+      } else {
+        // Fallback: assume raw ID
+        id = code;
       }
-      // Assuming it's just the ID if no URL structure found
-      return code;
+
+      if (id != null && id.isNotEmpty) {
+        // Clean up potential hash fragments if they ended up here (rare)
+        if (id.contains('#')) {
+          id = id.split('#').first;
+        }
+        return {'id': id, 'table': table};
+      }
+      return null;
     } catch (e) {
       return null;
     }
@@ -60,26 +75,22 @@ class _QRScannerPageState extends State<QRScannerPage> {
     for (final barcode in barcodes) {
       final String? code = barcode.rawValue;
       if (code != null && code.isNotEmpty) {
-        final String? establishmentId = _parseIdFromCode(code);
+        final Map<String, String?>? data = _parseDataFromCode(code);
 
+        if (data == null) continue;
+
+        final establishmentId = data['id'];
         if (establishmentId == null) continue;
 
         // Stop scanning
         setState(() => _isScanning = false);
 
-        // STRICT AUTH FLOW:
-        // Set ID in AuthService (backup)
+        // Set ID in AuthService (backup) - strict about ID
         AuthService.pendingEstablishmentId = establishmentId;
 
-        // Removed signOut here because it causes AuthGate to rebuild and might unmount LandingPage
-        // before we can process the result.
-        // LandingPage handles the auth state anyway (it is the unauthenticated view).
-
-        // Pop with result so LandingPage can handle it
-
-        // Pop with result so LandingPage can handle it
         if (mounted) {
-          Navigator.of(context).pop(establishmentId);
+          // Return the full data map
+          Navigator.of(context).pop(data);
         }
         break;
       }

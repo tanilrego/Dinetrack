@@ -5,7 +5,11 @@ import 'customer_navigation.dart';
 class QRTableMenuScreen extends StatelessWidget {
   final String establishmentId;
   final String tableId;
-  const QRTableMenuScreen({super.key, required this.establishmentId, required this.tableId});
+  const QRTableMenuScreen({
+    super.key,
+    required this.establishmentId,
+    required this.tableId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -16,7 +20,7 @@ class QRTableMenuScreen extends StatelessWidget {
         MaterialPageRoute(
           builder: (context) => CustomerNavigation(
             establishmentId: establishmentId,
-            tableId: tableId,
+            initialTableNumber: tableId,
           ),
         ),
       );
@@ -33,10 +37,7 @@ class QRTableMenuScreen extends StatelessWidget {
             const SizedBox(height: 20),
             Text(
               'Loading menu for table...',
-              style: TextStyle(
-                color: Colors.grey.shade600,
-                fontSize: 16,
-              ),
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
             ),
           ],
         ),
