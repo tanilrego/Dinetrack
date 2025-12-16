@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../../../core/services/supabase_service.dart';
 
 class AnalyticsScreen extends StatefulWidget {
@@ -505,17 +508,119 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
     );
   }
 
-  void _downloadPDF() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('PDF download feature coming soon!'),
-        backgroundColor: Color(0xFF4F46E5),
-        duration: Duration(seconds: 2),
+  Future<void> _downloadPDF() async {
+    setState(() => _isLoading = true);
+    try {
+      final doc = pw.Document();
+      final font = await PdfGoogleFonts.interRegular();
+      final fontBold = await PdfGoogleFonts.interBold();
+
+      doc.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          theme: pw.ThemeData.withFont(base: font, bold: fontBold),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text(
+                      'Business Analytics Report',
+                      style: pw.TextStyle(
+                        fontSize: 24,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(DateFormat('MMM dd, yyyy').format(DateTime.now())),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              // KPIs
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  _buildPdfStat(
+                    'Total Revenue',
+                    'MK${_totalSales.toStringAsFixed(2)}',
+                  ),
+                  _buildPdfStat('Total Orders', '$_totalOrders'),
+                  _buildPdfStat('Items Sold', '$_totalItems'),
+                  _buildPdfStat(
+                    'Avg Order',
+                    'MK${_averageOrderValue.toStringAsFixed(2)}',
+                  ),
+                ],
+              ),
+              pw.SizedBox(height: 30),
+              pw.Text(
+                'Recent Orders',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Table.fromTextArray(
+                context: context,
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                headers: ['Date', 'Table', 'Status', 'Total'],
+                data: _orders.map((order) {
+                  return [
+                    _formatDate(order['created_at'] as String?),
+                    '#${order['table_no'] ?? 'N/A'}',
+                    (order['status'] as String? ?? 'Unknown').toUpperCase(),
+                    'MK${(order['total_amount'] as num? ?? 0).toStringAsFixed(2)}',
+                  ];
+                }).toList(),
+              ),
+            ];
+          },
+        ),
+      );
+
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name:
+            'Analytics_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf',
+      );
+    } catch (e) {
+      debugPrint('Error generating PDF: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  pw.Widget _buildPdfStat(String label, String value) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey300),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
+          ),
+        ],
       ),
     );
-
-    // TODO: Implement PDF generation using pdf package
-    // Example: Use pdf package to generate PDF with orders data
-    // Then use share_plus or downloads package to save/share the PDF
   }
 }

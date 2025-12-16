@@ -486,64 +486,117 @@ class _LandingPageState extends State<LandingPage> {
                   ),
                 ),
                 SizedBox(height: isMobile ? 24 : 32),
+
+                // Supervisor Logic
                 _buildLoginOption(
                   context,
-                  title: 'Customer Login',
-                  icon: Icons.person,
-                  color: const Color(0xFF4F46E5),
+                  title: 'Supervisor Login',
+                  icon: Icons.admin_panel_settings,
+                  color: const Color(0xFFEA580C),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const LoginPage(expectedRole: 'supervisor'),
+                      ),
                     );
                   },
                 ),
                 const SizedBox(height: 16),
+
+                // Restaurant Logic (Show Sub-Dialog)
                 _buildLoginOption(
                   context,
                   title: 'Restaurant Login',
                   icon: Icons.restaurant,
                   color: const Color(0xFF10B981),
                   onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    );
+                    Navigator.pop(context); // Close main dialog
+                    _showRestaurantLoginOptions(context); // Open sub-dialog
                   },
                 ),
-                const SizedBox(height: 16),
-                _buildLoginOption(
-                  context,
-                  title: 'Guest Login',
-                  icon: Icons.person_outline,
-                  color: const Color(0xFF8B5CF6),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                    _signInAsGuest(targetEstablishmentId);
-                  },
-                ),
-                const SizedBox(height: 16),
-                _buildLoginOption(
-                  context,
-                  title: 'Supervisor Login',
-                  icon: Icons.admin_panel_settings,
-                  color: const Color(0xFFEA580C), // Orange color for supervisor
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginPage()),
-                    );
-                  },
-                ),
+
                 SizedBox(height: isMobile ? 16 : 24),
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   child: const Text(
                     'Cancel',
+                    style: TextStyle(color: Color(0xFF6B7280), fontSize: 16),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRestaurantLoginOptions(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 768;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            width: isMobile ? double.infinity : 400,
+            padding: EdgeInsets.all(isMobile ? 24 : 30),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Restaurant Access',
+                  style: TextStyle(
+                    fontSize: isMobile ? 18 : 22,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                _buildLoginOption(
+                  context,
+                  title: 'Operator Login',
+                  icon: Icons.store,
+                  color: const Color(0xFF10B981),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const LoginPage(expectedRole: 'operator'),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildLoginOption(
+                  context,
+                  title: 'Kitchen Staff Login',
+                  icon: Icons.kitchen,
+                  color: const Color(0xFF6366F1),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const LoginPage(expectedRole: 'kitchen'),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 20),
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Back',
                     style: TextStyle(color: Color(0xFF6B7280), fontSize: 16),
                   ),
                 ),

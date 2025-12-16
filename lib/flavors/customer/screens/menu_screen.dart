@@ -47,6 +47,7 @@ class _MenuScreenState extends State<MenuScreen> {
   final TextEditingController _searchController = TextEditingController();
   List<MenuItem> _searchResults = [];
   bool _isSearching = false;
+  List<String> _favoriteIds = [];
 
   @override
   void initState() {
@@ -240,6 +241,12 @@ class _MenuScreenState extends State<MenuScreen> {
         widget.establishmentId,
       );
 
+      // Load favorites if user is logged in
+      if (_supabaseService.isAuthenticated) {
+        final favorites = await _supabaseService.getUserFavorites();
+        _favoriteIds = favorites.map((item) => item.id).toList();
+      }
+
       if (allItems.isEmpty) {
         setState(() {
           _categories = [];
@@ -376,6 +383,44 @@ class _MenuScreenState extends State<MenuScreen> {
       return _searchResults;
     }
     return _menuItemsByCategory[_selectedCategoryId] ?? [];
+  }
+
+  // Toggles favorite status with optimistic update
+  Future<void> _toggleFavorite(MenuItem item) async {
+    if (!_supabaseService.isAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to save favorites')),
+      );
+      return;
+    }
+
+    final isFavorite = _favoriteIds.contains(item.id);
+
+    // Optimistic update
+    setState(() {
+      if (isFavorite) {
+        _favoriteIds.remove(item.id);
+      } else {
+        _favoriteIds.add(item.id);
+      }
+    });
+
+    try {
+      if (isFavorite) {
+        await _supabaseService.removeFromFavorites(item.id);
+      } else {
+        await _supabaseService.addToFavorites(item.id);
+      }
+    } catch (e) {
+      // Revert if error
+      setState(() {
+        if (isFavorite) {
+          _favoriteIds.add(item.id); // Was fav, failed to remove -> add back
+        } else {
+          _favoriteIds.remove(item.id); // Was not, failed to add -> remove
+        }
+      });
+    }
   }
 
   // Helper method to adapt the function signature for ItemDetailScreen
@@ -760,6 +805,35 @@ class _MenuScreenState extends State<MenuScreen> {
                       ),
                     ),
                   ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: GestureDetector(
+                    onTap: () => _toggleFavorite(item),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _favoriteIds.contains(item.id)
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        color: _favoriteIds.contains(item.id)
+                            ? Colors.red
+                            : Colors.grey,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
 

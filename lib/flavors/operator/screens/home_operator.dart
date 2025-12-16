@@ -496,10 +496,8 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
       case 0:
         return _buildDashboardView();
       case 1:
-        return _buildMenuView();
+        return _buildSubscriptionView();
       case 2:
-        return _buildOrdersView();
-      case 3:
         return QRCodeGeneratorPage(
           establishmentId: _currentEstablishmentId,
           isDarkMode: isDarkMode,
@@ -513,15 +511,13 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
             _loadDashboardData();
           },
         );
-      case 4:
+      case 3:
         return AnalyticsScreen(
           establishmentId: _currentEstablishmentId,
           isDarkMode: isDarkMode,
         );
-      case 5:
+      case 4:
         return _buildStaffView();
-      case 6:
-        return _buildSettingsView();
       default:
         return _buildDashboardView();
     }
@@ -553,29 +549,6 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
   }
 
   // Placeholder views for other menu items
-  Widget _buildMenuView() {
-    return Center(
-      child: Text(
-        'Menu Management',
-        style: TextStyle(
-          fontSize: 24,
-          color: isDarkMode ? Colors.white : Colors.black,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildOrdersView() {
-    return Center(
-      child: Text(
-        'Orders View',
-        style: TextStyle(
-          fontSize: 24,
-          color: isDarkMode ? Colors.white : Colors.black,
-        ),
-      ),
-    );
-  }
 
   Widget _buildStaffView() {
     return SingleChildScrollView(
@@ -857,15 +830,91 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     );
   }
 
-  Widget _buildSettingsView() {
-    return Center(
-      child: Text(
-        'Settings',
-        style: TextStyle(
-          fontSize: 24,
-          color: isDarkMode ? Colors.white : Colors.black,
-        ),
-      ),
+  Widget _buildSubscriptionView() {
+    return FutureBuilder(
+      future: _supabaseService.client
+          .from('subscriptions')
+          .select()
+          .eq('establishment_id', _currentEstablishmentId)
+          .eq('status', 'active')
+          .maybeSingle(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final subscription = snapshot.data;
+        int daysLeft = 0;
+        if (subscription != null) {
+          final endDate = DateTime.parse(subscription['end_date']);
+          daysLeft = endDate.difference(DateTime.now()).inDays;
+        }
+
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.card_membership,
+                size: 80,
+                color: isDarkMode ? Colors.white : Colors.blue,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Subscription Status',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: isDarkMode ? Colors.white : Colors.black,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (subscription != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: daysLeft < 7
+                        ? Colors.red.withValues(alpha: 0.1)
+                        : Colors.green.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: daysLeft < 7 ? Colors.red : Colors.green,
+                    ),
+                  ),
+                  child: Text(
+                    '$daysLeft Days Left',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: daysLeft < 7 ? Colors.red : Colors.green,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Plan: ${subscription['plan_type'].toString().toUpperCase()}',
+                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ] else ...[
+                const Text(
+                  'No active subscription',
+                  style: TextStyle(fontSize: 18, color: Colors.grey),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () {
+                    // Suggest subscription flow
+                  },
+                  child: const Text('Subscribe Now'),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -885,12 +934,10 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           _buildLogo(),
           const SizedBox(height: 40),
           _buildSidebarIcon(Icons.dashboard, 0),
-          _buildSidebarIcon(Icons.restaurant_menu, 1),
-          _buildSidebarIcon(Icons.receipt_long, 2),
-          _buildSidebarIcon(Icons.qr_code_2, 3),
-
-          _buildSidebarIcon(Icons.analytics_outlined, 4), // Analytics
-          _buildSidebarIcon(Icons.people, 5),
+          _buildSidebarIcon(Icons.card_membership, 1), // Subscription
+          _buildSidebarIcon(Icons.qr_code_2, 2), // QR Code
+          _buildSidebarIcon(Icons.analytics_outlined, 3), // Analytics
+          _buildSidebarIcon(Icons.people, 4), // Staff
           const Spacer(),
           // Logout Icon
           GestureDetector(

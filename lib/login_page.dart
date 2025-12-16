@@ -6,7 +6,9 @@ import 'core/services/supabase_service.dart';
 import 'core/routing/role_router.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+  final String? expectedRole; // 'supervisor', 'operator', 'kitchen'
+
+  const LoginPage({super.key, this.expectedRole});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -44,6 +46,44 @@ class _LoginPageState extends State<LoginPage> {
           .eq('id', user.id)
           .maybeSingle();
 
+      // Role enforcement logic
+      if (widget.expectedRole != null) {
+        final actualRole = existing?['user_type'] as String? ?? 'customer';
+
+        // Handle Operator vs Kitchen (both share 'operator' type sometimes? NO, they are distinct: 'manager/operator' vs 'kitchen')
+        // user_type enum: 'admin', 'supervisor', 'manager' (operator), 'kitchen', 'customer', 'driver'
+
+        // Map expected to strict checks
+        // 'supervisor' -> user_type must be 'supervisor'
+        // 'operator' -> user_type must be 'manager' (or 'owner' if referenced that way)
+        // 'kitchen' -> user_type must be 'kitchen'
+
+        bool accessDenied = false;
+
+        if (widget.expectedRole == 'supervisor' && actualRole != 'supervisor') {
+          accessDenied = true;
+        } else if (widget.expectedRole == 'operator' &&
+            actualRole != 'operator') {
+          // Fixed: Schema uses 'operator', not 'manager'.
+          accessDenied = true;
+        } else if (widget.expectedRole == 'kitchen' &&
+            actualRole != 'kitchen') {
+          accessDenied = true;
+        }
+
+        if (accessDenied) {
+          await SupabaseService().client.auth.signOut();
+          if (mounted) {
+            setState(() {
+              _errorMessage =
+                  "Access Denied: This account is not a ${widget.expectedRole}. It is a $actualRole.";
+              _busy = false;
+            });
+          }
+          return;
+        }
+      }
+
       if (existing == null) {
         await SupabaseService().client
             .from('users')
@@ -66,9 +106,9 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } on AuthException catch (e) {
-      setState(() => _errorMessage = e.message);
+      if (mounted) setState(() => _errorMessage = e.message);
     } catch (e) {
-      setState(() => _errorMessage = 'Login failed: $e');
+      if (mounted) setState(() => _errorMessage = 'Login failed: $e');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
