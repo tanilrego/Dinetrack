@@ -377,17 +377,9 @@ class _CartScreenState extends State<CartScreen> {
               child: Column(
                 children: [
                   _buildSummaryRow(
-                    'Subtotal',
+                    'Total',
                     _calculateTotal(),
                   ), // Calculate dynamically
-                  const SizedBox(height: 8),
-                  _buildSummaryRow('Tax', _calculateTax(_calculateTotal())),
-                  const Divider(height: 20),
-                  _buildSummaryRow(
-                    'Total Amount',
-                    _calculateTotal() + _calculateTax(_calculateTotal()),
-                    isTotal: true,
-                  ),
                 ],
               ),
             ),
@@ -487,11 +479,6 @@ class _CartScreenState extends State<CartScreen> {
       0.0,
       (sum, item) => sum + (item.menuItem.price * item.quantity),
     );
-  }
-
-  double _calculateTax(double subtotal) {
-    // Assuming 10% tax rate - adjust according to your business rules
-    return subtotal * 0.10;
   }
 
   void _showClearCartDialog(BuildContext context) {
