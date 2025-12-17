@@ -93,16 +93,26 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
             _kitchenStation = kitchenData['assigned_station'] ?? 'Kitchen';
           });
 
-          // Fetch establishment image to use as profile image as requested
+          // Fetch establishment owner's profile image as requested (Restaurant Profile)
           final estData = await supabase
               .from('establishments')
-              .select('image_url')
+              .select('owner_id')
               .eq('id', establishmentId)
               .maybeSingle();
-          if (estData != null && estData['image_url'] != null) {
-            setState(() {
-              _profileImageUrl = estData['image_url'];
-            });
+
+          if (estData != null && estData['owner_id'] != null) {
+            final ownerId = estData['owner_id'];
+            final ownerData = await supabase
+                .from('users')
+                .select('profile_image_url')
+                .eq('id', ownerId)
+                .maybeSingle();
+
+            if (ownerData != null && ownerData['profile_image_url'] != null) {
+              setState(() {
+                _profileImageUrl = ownerData['profile_image_url'];
+              });
+            }
           }
         } else {
           // Fallback logic...
@@ -115,17 +125,29 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           if (userData != null && userData['user_type'] == 'kitchen') {
             final establishments = await supabase
                 .from('establishments')
-                .select('id, image_url')
+                .select('id, owner_id')
                 .limit(1);
 
             if (establishments.isNotEmpty) {
               final establishmentId = establishments[0]['id'].toString();
               setState(() {
                 _currentEstablishmentId = establishmentId;
-                if (establishments[0]['image_url'] != null) {
-                  _profileImageUrl = establishments[0]['image_url'];
-                }
               });
+
+              // Fetch owner profile for fallback too
+              final ownerId = establishments[0]['owner_id'];
+              if (ownerId != null) {
+                final ownerData = await supabase
+                    .from('users')
+                    .select('profile_image_url')
+                    .eq('id', ownerId)
+                    .maybeSingle();
+                if (ownerData != null) {
+                  setState(() {
+                    _profileImageUrl = ownerData['profile_image_url'];
+                  });
+                }
+              }
             }
           }
         }
