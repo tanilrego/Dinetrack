@@ -51,7 +51,10 @@ class _LandingPageState extends State<LandingPage> {
           );
 
           if (restaurant.isNotEmpty) {
-            _openRestaurantDetails(restaurant);
+            _openRestaurantDetails(
+              restaurant,
+              tableNumber: AuthService.pendingTableNumber,
+            );
           }
         }
       });

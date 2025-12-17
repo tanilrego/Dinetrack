@@ -104,33 +104,58 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
   Future<void> _resolveInitialTableNumber() async {
     if (widget.initialTableNumber == null) return;
 
+    print(
+      'DEBUG: Resolving initial table number: "${widget.initialTableNumber}" for establishment: ${widget.establishmentId}',
+    );
+
     try {
-      // Clean parsing
+      // 1. Try treating it as a table_number (int)
       final tableNumStr = widget.initialTableNumber!.replaceAll(
         RegExp(r'[^0-9]'),
         '',
       );
-      if (tableNumStr.isEmpty) return;
 
-      final tableNum = int.parse(tableNumStr);
+      if (tableNumStr.isNotEmpty) {
+        final tableNum = int.parse(tableNumStr);
+        final data = await _supabaseService.client
+            .from('tables')
+            .select('id')
+            .eq('establishment_id', widget.establishmentId)
+            .eq('table_number', tableNum)
+            .maybeSingle();
 
-      final data = await _supabaseService.client
+        if (mounted && data != null) {
+          setState(() {
+            _resolvedTableId = data['id'];
+          });
+          print(
+            'DEBUG: Resolved table number $tableNum to UUID: $_resolvedTableId',
+          );
+          return;
+        } else {
+          print('DEBUG: Lookup by table_number=$tableNum returned null.');
+        }
+      }
+
+      // 2. Try treating it as a table ID (string) directly
+      final dataById = await _supabaseService.client
           .from('tables')
-          .select('id')
+          .select('id, table_number')
           .eq('establishment_id', widget.establishmentId)
-          .eq('table_number', tableNum)
+          .eq('id', widget.initialTableNumber!)
           .maybeSingle();
 
-      if (mounted && data != null) {
+      if (mounted && dataById != null) {
         setState(() {
-          _resolvedTableId = data['id'];
+          _resolvedTableId = dataById['id'];
         });
-        print(
-          'DEBUG: Context resolved table number $tableNum to UUID: $_resolvedTableId',
-        );
+        print('DEBUG: Resolved matches ID directly: $_resolvedTableId');
+        return;
       }
+
+      print('DEBUG: Failed to resolve table from initial input.');
     } catch (e) {
-      print('DEBUG: Failed to resolve initial table context: $e');
+      print('DEBUG: Exception resolving initial table context: $e');
     }
   }
 

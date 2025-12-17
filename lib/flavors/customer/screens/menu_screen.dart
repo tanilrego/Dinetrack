@@ -14,7 +14,6 @@ class MenuScreen extends StatefulWidget {
   final Function() onClearCart;
   final double cartTotal;
   final Function() onCheckout;
-
   const MenuScreen({
     super.key,
     required this.establishmentId,
