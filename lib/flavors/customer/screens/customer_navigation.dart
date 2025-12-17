@@ -91,6 +91,17 @@ class _CustomerNavigationState extends State<CustomerNavigation> {
     }
   }
 
+  @override
+  void didUpdateWidget(CustomerNavigation oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialTableNumber != oldWidget.initialTableNumber) {
+      print(
+        'DEBUG: didUpdateWidget detected table change: ${widget.initialTableNumber}',
+      );
+      _resolveInitialTableNumber();
+    }
+  }
+
   // Calculate cart total
   void _calculateCartTotal() {
     setState(() {
