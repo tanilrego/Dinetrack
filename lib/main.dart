@@ -223,7 +223,8 @@ String? _getTableIdFromUrl() {
     if (hash.contains('?')) {
       final queryPart = hash.split('?').last;
       final uri = Uri(query: queryPart);
-      return uri.queryParameters['table_id'];
+      return uri.queryParameters['table_number'] ??
+          uri.queryParameters['table_id'];
     }
   } catch (e) {
     debugPrint('Error parsing table ID: $e');

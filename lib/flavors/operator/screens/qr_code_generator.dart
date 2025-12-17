@@ -102,11 +102,10 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     return 'table-$_tableNumber-$uniqueCode';
   }
 
-  String _generateQRCodeData(String tableUuid) {
-    // Production URL for deployed app with table_id parameter
-    // The format matches what main.dart expects: #/restaurant/{id}?table_id={uuid}
-    // Note: Placing query param at the end ensures main.dart parsing logic works (split('?').last)
-    return 'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}?table_id=$tableUuid';
+  String _generateQRCodeData(int tableNumber) {
+    // Production URL for deployed app with table_number parameter
+    // The format matches what main.dart expects: #/restaurant/{id}?table_number={number}
+    return 'https://dinetrack-3hhc.onrender.com/#/restaurant/${widget.establishmentId}?table_number=$tableNumber';
   }
 
   Future<void> _generateQRCode() async {
@@ -153,8 +152,8 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
       if (response.isNotEmpty) {
         final tableId = response[0]['id'] as String;
 
-        // Now generate the real URL using the table UUID
-        final qrCodeData = _generateQRCodeData(tableId);
+        // Now generate the real URL using the table number
+        final qrCodeData = _generateQRCodeData(_tableNumber);
 
         // Update the row with the correct QR data
         final updatedResponse = await _supabase
