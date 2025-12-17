@@ -1,5 +1,6 @@
 import 'package:dinetrack/flavors/operator/screens/profile_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:dinetrack/core/services/supabase_service.dart';
 import 'package:dinetrack/flavors/operator/screens/analytics_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -39,6 +40,14 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+  }
+
+  RealtimeChannel? _dashboardChannel;
+
+  @override
+  void dispose() {
+    _dashboardChannel?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
@@ -85,6 +94,9 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
 
       // Load the rest of the dashboard data...
       await _loadEstablishmentDashboardData();
+
+      // Setup Realtime Subscription
+      _subscribeToDashboardUpdates();
     } catch (e) {
       // print('Error loading dashboard data: $e');
     } finally {
@@ -92,23 +104,66 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
     }
   }
 
+  void _subscribeToDashboardUpdates() {
+    if (_currentEstablishmentId.isEmpty) return;
+
+    // Clean up existing if any
+    _dashboardChannel?.unsubscribe();
+
+    _dashboardChannel = supabase
+        .channel('dashboard:$_currentEstablishmentId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'establishment_id',
+            value: _currentEstablishmentId,
+          ),
+          callback: (payload) {
+            _loadEstablishmentDashboardData(); // Reload stats on order change
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'tables',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'establishment_id',
+            value: _currentEstablishmentId,
+          ),
+          callback: (payload) {
+            _loadEstablishmentDashboardData(); // Reload stats on table change
+          },
+        );
+
+    _dashboardChannel!.subscribe();
+  }
+
   Future<void> _loadEstablishmentDashboardData() async {
     try {
+      // Calculate start of day in Local time, then convert to UTC for DB query
+      final now = DateTime.now();
+      final startOfDayLocal = DateTime(now.year, now.month, now.day);
+      final startOfDayUtcISO = startOfDayLocal.toUtc().toIso8601String();
+
       // Load sales data for today - only PAID orders
       final salesData = await supabase
           .from('orders')
           .select('total_amount')
-          .gte('created_at', DateTime.now().toIso8601String().split('T')[0])
+          .gte('created_at', startOfDayUtcISO)
           .eq('establishment_id', _currentEstablishmentId)
           .eq('payment_status', 'paid')
           .neq('table_no', 0); // Exclude subscription orders
 
-      totalSales = (salesData as List).fold(
+      final newTotalSales = (salesData as List).fold(
         0.0,
         (sum, order) => sum + ((order['total_amount'] ?? 0) as num).toDouble(),
       );
 
-      totalOrders = (salesData as List).length;
+      final newTotalOrders = (salesData).length;
 
       // Load ALL tables for the establishment
       final tablesData = await supabase
@@ -116,7 +171,7 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           .select('id')
           .eq('establishment_id', _currentEstablishmentId);
 
-      activeTables = (tablesData as List).length;
+      final newActiveTables = (tablesData as List).length;
 
       // Load staff data
       await _loadStaffData();
@@ -131,6 +186,16 @@ class _OperatorHomeScreenState extends State<OperatorHomeScreen> {
           .order('table_number');
 
       qrCodesList = List<Map<String, dynamic>>.from(qrData as List);
+
+      // Let's just update the state variables
+      if (mounted) {
+        setState(() {
+          totalSales = newTotalSales;
+          totalOrders = newTotalOrders;
+          activeTables = newActiveTables;
+          // qrCodesList and staffList are updated in their respective methods or assignments above
+        });
+      }
 
       // print('✅ Dashboard data loaded successfully');
     } catch (e) {

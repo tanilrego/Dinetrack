@@ -101,7 +101,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
   String _formatDate(String? dateString) {
     if (dateString == null) return 'N/A';
     try {
-      final date = DateTime.parse(dateString);
+      final date = DateTime.parse(dateString).toLocal();
       return DateFormat('MMM dd, yyyy HH:mm').format(date);
     } catch (e) {
       return 'N/A';

@@ -255,6 +255,52 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
     );
   }
 
+  Future<void> _deleteQRCode(String tableId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete QR Code?'),
+        content: const Text(
+          'This will permanently delete this table and its QR code. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      await _supabase.from('tables').delete().eq('id', tableId);
+
+      setState(() {
+        _generatedQRCodes.removeWhere((item) => item['id'] == tableId);
+        _isLoading = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('QR Code deleted successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showErrorDialog('Failed to delete QR Code: $e');
+      }
+    }
+  }
+
   Future<void> _generatePdf(List<Map<String, dynamic>> codes) async {
     final pdf = pw.Document();
 
@@ -348,74 +394,100 @@ class _QRCodeGeneratorPageState extends State<QRCodeGeneratorPage> {
             ),
           ],
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Container(
-              width: 120,
-              height: 120,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade300),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: QrImageView(
-                data: qrCode['qr_code_data'] ?? '',
-                version: QrVersions.auto,
-                size: 104,
-                backgroundColor: isDarkMode
-                    ? const Color(0xFF2A2A2A)
-                    : Colors.white,
-                eyeStyle: QrEyeStyle(
-                  eyeShape: QrEyeShape.square,
-                  color: isDarkMode ? Colors.white : Colors.black,
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 24), // Add space for delete button
+                Center(
+                  child: Container(
+                    width: 120,
+                    height: 120,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: QrImageView(
+                      data: qrCode['qr_code_data'] ?? '',
+                      version: QrVersions.auto,
+                      size: 104,
+                      backgroundColor: isDarkMode
+                          ? const Color(0xFF2A2A2A)
+                          : Colors.white,
+                      eyeStyle: QrEyeStyle(
+                        eyeShape: QrEyeShape.square,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                      dataModuleStyle: QrDataModuleStyle(
+                        dataModuleShape: QrDataModuleShape.square,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
                 ),
-                dataModuleStyle: QrDataModuleStyle(
-                  dataModuleShape: QrDataModuleShape.square,
-                  color: isDarkMode ? Colors.white : Colors.black,
+                const SizedBox(height: 8),
+                Text(
+                  qrCode['label'] ?? 'Table',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              qrCode['label'] ?? 'Table',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: isDarkMode ? Colors.white : Colors.black,
-              ),
-            ),
-            Text(
-              'Table #${qrCode['table_number']}',
-              style: TextStyle(
-                fontSize: 12,
-                color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade600,
-              ),
-            ),
-            Text(
-              'Capacity: ${qrCode['capacity'] ?? 0}',
-              style: TextStyle(
-                fontSize: 11,
-                color: isDarkMode ? Colors.grey.shade400 : Colors.grey.shade500,
-              ),
-            ),
-            Container(
-              margin: const EdgeInsets.only(top: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: (qrCode['is_available'] ?? false)
-                    ? Colors.green.shade100
-                    : Colors.red.shade100,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                (qrCode['is_available'] ?? false) ? 'Available' : 'Occupied',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: (qrCode['is_available'] ?? false)
-                      ? Colors.green.shade800
-                      : Colors.red.shade800,
+                Text(
+                  'Table #${qrCode['table_number']}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isDarkMode
+                        ? Colors.grey.shade400
+                        : Colors.grey.shade600,
+                  ),
                 ),
+                Text(
+                  'Capacity: ${qrCode['capacity'] ?? 0}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDarkMode
+                        ? Colors.grey.shade400
+                        : Colors.grey.shade500,
+                  ),
+                ),
+                Container(
+                  margin: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: (qrCode['is_available'] ?? false)
+                        ? Colors.green.shade100
+                        : Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    (qrCode['is_available'] ?? false)
+                        ? 'Available'
+                        : 'Occupied',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: (qrCode['is_available'] ?? false)
+                          ? Colors.green.shade800
+                          : Colors.red.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () {
+                  _deleteQRCode(qrCode['id'].toString());
+                },
               ),
             ),
           ],

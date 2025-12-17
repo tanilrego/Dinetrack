@@ -220,14 +220,20 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   }
 
   void _subscribeToKDS() {
+    if (_currentEstablishmentId.isEmpty) return;
+
     supabase
-        .channel('public:orders')
+        .channel('public:orders:$_currentEstablishmentId')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'establishment_id',
+            value: _currentEstablishmentId,
+          ),
           callback: (payload) {
-            // print('KDS Update Recieved: ${payload.eventType}');
             _loadKDSOrders();
           },
         )
@@ -235,43 +241,46 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
   }
 
   void _subscribeToAssistanceRequests() {
+    if (_currentEstablishmentId.isEmpty) return;
+
     supabase
-        .channel('public:assist_requests')
+        .channel('public:assist_requests:$_currentEstablishmentId')
         .onPostgresChanges(
           event: PostgresChangeEvent.insert,
           schema: 'public',
           table: 'assist_requests',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'establishment_id',
+            value: _currentEstablishmentId,
+          ),
           callback: (payload) {
             final newRecord = payload.newRecord;
-            if (newRecord['establishment_id'].toString() ==
-                _currentEstablishmentId) {
-              final tableId = newRecord['table_id'] ?? 'Unknown';
-              final tableNum =
-                  _tableNumberMap[tableId.toString()]?.toString() ??
-                  (tableId.toString().startsWith('table-')
-                      ? tableId.toString().split('-')[1]
-                      : tableId.toString());
+            // No need to check establishment_id again if filtered, but safe to keep or remove.
+            final tableId = newRecord['table_id'] ?? 'Unknown';
+            final tableNum =
+                _tableNumberMap[tableId.toString()]?.toString() ??
+                (tableId.toString().startsWith('table-')
+                    ? tableId.toString().split('-')[1]
+                    : tableId.toString());
 
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'New Assistance Request from Table $tableNum',
-                    ),
-                    backgroundColor: Colors.red,
-                    duration: const Duration(seconds: 5),
-                    action: SnackBarAction(
-                      label: 'VIEW',
-                      textColor: Colors.white,
-                      onPressed: () {
-                        setState(() {
-                          selectedMenuIndex = 5; // Switch to Assistance View
-                        });
-                      },
-                    ),
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('New Assistance Request from Table $tableNum'),
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 5),
+                  action: SnackBarAction(
+                    label: 'VIEW',
+                    textColor: Colors.white,
+                    onPressed: () {
+                      setState(() {
+                        selectedMenuIndex = 5; // Switch to Assistance View
+                      });
+                    },
                   ),
-                );
-              }
+                ),
+              );
             }
           },
         )
@@ -1422,6 +1431,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
       stream: supabase
           .from('assist_requests')
           .stream(primaryKey: ['id'])
+          .eq('establishment_id', _currentEstablishmentId)
           .order('created_at', ascending: false),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
@@ -1432,11 +1442,9 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        // Filter for open requests for current establishment
+        // Filter for open requests (status check)
         final requests = snapshot.data!.where((req) {
-          return req['establishment_id'].toString() ==
-                  _currentEstablishmentId &&
-              req['status'] == 'open';
+          return req['status'] == 'open';
         }).toList();
 
         if (requests.isEmpty) {

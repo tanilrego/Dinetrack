@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/services/auth_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -580,11 +581,41 @@ class OrderHistoryScreen extends StatefulWidget {
 class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   List<dynamic> _orders = [];
   bool _isLoading = true;
+  RealtimeChannel? _ordersSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadOrderHistory();
+    _subscribeToOrders();
+  }
+
+  @override
+  void dispose() {
+    _ordersSubscription?.unsubscribe();
+    super.dispose();
+  }
+
+  void _subscribeToOrders() {
+    final user = widget.supabaseService.client.auth.currentUser;
+    if (user == null) return;
+
+    _ordersSubscription = widget.supabaseService.client
+        .channel('public:orders:customer:${user.id}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'orders',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'customer_id',
+            value: user.id,
+          ),
+          callback: (payload) {
+            _loadOrderHistory();
+          },
+        )
+        .subscribe();
   }
 
   Future<void> _loadOrderHistory() async {
@@ -597,16 +628,20 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             .eq('customer_id', user.id)
             .order('created_at', ascending: false);
 
-        setState(() {
-          _orders = response;
-        });
+        if (mounted) {
+          setState(() {
+            _orders = response;
+            _isLoading = false; // Set loading to false here
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error loading order history: $e');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 

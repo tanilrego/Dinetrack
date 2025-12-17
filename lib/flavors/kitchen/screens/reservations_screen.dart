@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/services/supabase_service.dart';
 import 'package:intl/intl.dart';
 
@@ -26,10 +27,30 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
   void initState() {
     super.initState();
     _fetchReservations();
+    _subscribeToReservations();
   }
 
-  Future<void> _fetchReservations() async {
-    setState(() => _isLoading = true);
+  void _subscribeToReservations() {
+    _supabaseService.client
+        .channel('public:reservations:${widget.establishmentId}')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'reservations',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'establishment_id',
+            value: widget.establishmentId,
+          ),
+          callback: (payload) {
+            _fetchReservations(silent: true);
+          },
+        )
+        .subscribe();
+  }
+
+  Future<void> _fetchReservations({bool silent = false}) async {
+    if (!silent) setState(() => _isLoading = true);
     try {
       var query = _supabaseService.client
           .from('reservations')
@@ -41,9 +62,11 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
       }
 
       final response = await query.order('reservation_time', ascending: true);
-      setState(() {
-        _reservations = List<Map<String, dynamic>>.from(response);
-      });
+      if (mounted) {
+        setState(() {
+          _reservations = List<Map<String, dynamic>>.from(response);
+        });
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -51,7 +74,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && !silent) setState(() => _isLoading = false);
     }
   }
 
@@ -62,7 +85,7 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
           .update({'status': status})
           .eq('id', id);
 
-      _fetchReservations(); // Refresh
+      // _fetchReservations(); // Handled by subscription now automatically
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
