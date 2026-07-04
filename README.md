@@ -1,16 +1,35 @@
-# dinetrack
+# 🍽️ DineTrack
 
-A new Flutter project.
+DineTrack is a restaurant management system developed to simplify restaurant operations by managing orders, menu items, customers, and sales in one platform.
 
-## Getting Started
+## Features
 
-This project is a starting point for a Flutter application.
+- User authentication (Login/Register)
+- Menu management
+- Customer order management
+- Table management
+- Sales and transaction tracking
+- Database integration
+- Dashboard for restaurant operations
+- Online food ordering
+- QR Code menu
+- Mobile application
+- Inventory management
+- Employee management
+- Report generation
+- Payment gateway integration
 
-A few resources to get you started if this is your first Flutter project:
+## Technologies Used
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Java
+- JavaFX
+- MySQL
+- JDBC
+- CSS
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Purpose
+
+The project was developed as a software engineering project to demonstrate the implementation of database systems, graphical user interfaces, and object-oriented programming principles in solving real-world restaurant management challenges.
+
+**Tanil Rego**
+Software Engineer
