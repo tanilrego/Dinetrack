@@ -549,9 +549,7 @@ class _KitchenStaffScreenState extends State<KitchenStaffScreen> {
     // Collect all items
     List<OrderItem> allItems = [];
     for (var o in orders) {
-      if (o.items != null) {
-        allItems.addAll(o.items!);
-      }
+      allItems.addAll(o.items!);
     }
 
     // Determine overall status color
